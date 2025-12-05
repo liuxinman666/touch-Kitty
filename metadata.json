@@ -1,0 +1,7 @@
+{
+  "name": "Touch AR Cat",
+  "description": "An interactive Augmented Reality experience where a typewriter-style cat responds to your hand gestures.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
