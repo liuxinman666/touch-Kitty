@@ -59,15 +59,15 @@ const CatEye: React.FC<{ isLeft: boolean, isSquinting: boolean, pupilX: number, 
         <svg className="absolute inset-0 w-full h-full z-[15] pointer-events-none" viewBox="0 0 100 100" style={{ overflow: 'visible' }}>
             {isLeft ? (
                 /* Left Eye: Thick Outer Wing (Left), Tapers to Inner Corner (Right) */
-                /* Raised anchors to y=38, top arch y=-25 */
+                /* Shifted UP 5px (y=38) and THINNER (y=45 at wing) */
                 <path 
-                    d="M -5 38 Q 50 -25 105 38 L 105 38 Q 50 -15 -5 45 Z"
+                    d="M -5 38 Q 50 -25 105 38 L 105 38 Q 50 -20 -5 45 Z"
                     fill="#0f172a"
                 />
             ) : (
                 /* Right Eye: Thin Inner Corner (Left), Thick Outer Wing (Right) */
                 <path 
-                    d="M -5 38 Q 50 -25 105 38 L 105 45 Q 50 -15 -5 38 Z"
+                    d="M -5 38 Q 50 -25 105 38 L 105 45 Q 50 -20 -5 38 Z"
                     fill="#0f172a"
                 />
             )}
@@ -75,7 +75,7 @@ const CatEye: React.FC<{ isLeft: boolean, isSquinting: boolean, pupilX: number, 
     )}
 
     {/* OPEN EYE LASHES - Positioned relative to container, z-20 to sit on top of everything */}
-    {/* Shifted UP to match y=38 eyeliner (approx +7px shift -> y=45 area) */}
+    {/* Shifted UP to match new eyeliner height (y=38) -> Lashes start ~y=45 */}
     {!isSquinting && (
         <svg 
             className={`absolute z-20 w-32 h-32 text-[#0f172a] pointer-events-none ${isLeft ? '-left-10 -top-6' : '-right-10 -top-6'}`} 
@@ -126,6 +126,7 @@ const CartoonCat: React.FC<TypewriterCatProps> = ({ action, onAnimationEnd, look
   const pupilY = lookAt ? lookAt.y * 12 : 0;
 
   const isSquinting = blinking || action === CatAction.JUMP || action === CatAction.SNEEZE || action === CatAction.SHAKE;
+  const isHappyAction = [CatAction.JUMP, CatAction.SPIN, CatAction.SHAKE].includes(action);
 
   // Animation Styles
   const getContainerStyle = (): React.CSSProperties => {
@@ -133,6 +134,8 @@ const CartoonCat: React.FC<TypewriterCatProps> = ({ action, onAnimationEnd, look
       transition: 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
       transformStyle: 'preserve-3d',
     };
+
+    if (!action) return baseStyle;
 
     switch (action) {
       case CatAction.SPIN:
@@ -156,6 +159,9 @@ const CartoonCat: React.FC<TypewriterCatProps> = ({ action, onAnimationEnd, look
   const furShadow = "shadow-[inset_0_-4px_10px_rgba(0,0,0,0.1)]"; // Internal shadow for plush look
   const noiseOverlay = "url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIj48ZmlsdGVyIGlkPSJub2lzZSI+PGZlVHVyYnVsZW5jZSB0eXBlPSJmcmFjdGFsTm9pc2UiIGJhc2VGcmVxdWVuY3k9IjAuNjUiIG51bU9jdGF2ZXM9IjMiIHN0aXRjaFRpbGVzPSJzdGl0Y2giLz48L2ZpbHRlcj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWx0ZXI9InVybCgjbm9pc2UpIiBvcGFjaXR5PSIwLjUiLz48L3N2Zz4=')";
 
+  // Helper for Heart Particles
+  const heartColors = ['#ef4444', '#f472b6', '#facc15', '#60a5fa']; // Red, Pink, Yellow, Blue
+
   return (
     <div 
       className="relative select-none pointer-events-none w-[600px] h-[600px] flex items-center justify-center"
@@ -171,6 +177,39 @@ const CartoonCat: React.FC<TypewriterCatProps> = ({ action, onAnimationEnd, look
            <div className="absolute w-1 h-2 bg-blue-200 rounded-full animate-droplet-4" style={{ top: 2, left: -10 }}></div>
            <div className="absolute w-2 h-2 bg-sky-400 rounded-full animate-droplet-5" style={{ top: 2, left: 10 }}></div>
         </div>
+      )}
+
+      {/* Heart Particles Effect (Happy Actions) */}
+      {isHappyAction && (
+          <div className="absolute top-[20%] left-1/2 -translate-x-1/2 z-50 pointer-events-none w-0 h-0">
+              {[...Array(12)].map((_, i) => {
+                  const angle = (i * 30) % 360;
+                  const spread = 60 + Math.random() * 40;
+                  const tx = Math.cos(angle * Math.PI / 180) * spread;
+                  const ty = Math.sin(angle * Math.PI / 180) * spread - 60; // Bias upwards
+                  const color = heartColors[i % heartColors.length];
+                  
+                  return (
+                      <div 
+                        key={i}
+                        className="absolute w-6 h-6 animate-heart-fly"
+                        style={{
+                            '--tx': `${tx}px`,
+                            '--ty': `${ty}px`,
+                            '--rot': `${Math.random() * 40 - 20}deg`,
+                            animationDelay: `${i * 0.05}s`,
+                            color: color,
+                            top: 0,
+                            left: 0
+                        } as React.CSSProperties}
+                      >
+                         <svg viewBox="0 0 32 32" fill="currentColor" className="w-full h-full drop-shadow-sm">
+                             <path d="M16 28 C16 28 3 18 3 10 A7 7 0 0 1 16 6 A7 7 0 0 1 29 10 C29 18 16 28 16 28 Z" />
+                         </svg>
+                      </div>
+                  )
+              })}
+          </div>
       )}
 
       {/* --- THE FLUFFY CAT --- */}
@@ -459,6 +498,17 @@ const CartoonCat: React.FC<TypewriterCatProps> = ({ action, onAnimationEnd, look
         @keyframes dropletFly {
             0% { transform: translate(0, 0) scale(1); opacity: 1; }
             100% { transform: translate(var(--tx), var(--ty)) scale(0.5); opacity: 0; }
+        }
+
+        /* Heart Animation */
+        .animate-heart-fly {
+            animation: heartFly 1s ease-out forwards;
+            opacity: 0;
+        }
+        @keyframes heartFly {
+            0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+            20% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
+            100% { transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) rotate(var(--rot)) scale(0.5); opacity: 0; }
         }
         
         @keyframes noseWiggle {
