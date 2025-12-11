@@ -20,12 +20,16 @@ const CartoonCat: React.FC<TypewriterCatProps> = ({ action, onAnimationEnd, look
     return () => clearInterval(blinkInterval);
   }, []);
 
-  // Eye Tracking Logic
+  // Eye Tracking Logic (Head moves more)
   const headRotateX = lookAt ? -lookAt.y * 15 : 0;
   const headRotateY = lookAt ? lookAt.x * 15 : 0;
   
-  const pupilX = lookAt ? lookAt.x * 12 : 0;
-  const pupilY = lookAt ? lookAt.y * 10 : 0;
+  // Body Tracking Logic (Body moves less, creating 3D parallax)
+  const bodyRotateX = lookAt ? -lookAt.y * 5 : 0;
+  const bodyRotateY = lookAt ? lookAt.x * 8 : 0;
+  
+  const pupilX = lookAt ? lookAt.x * 14 : 0;
+  const pupilY = lookAt ? lookAt.y * 12 : 0;
 
   const isSquinting = blinking || action === CatAction.JUMP || action === CatAction.SNEEZE || action === CatAction.SHAKE;
 
@@ -56,6 +60,7 @@ const CartoonCat: React.FC<TypewriterCatProps> = ({ action, onAnimationEnd, look
   // Helper for Fur Gradients
   const furGradient = "bg-gradient-to-b from-amber-300 via-amber-400 to-orange-400";
   const furShadow = "shadow-[inset_0_-4px_10px_rgba(0,0,0,0.1)]"; // Internal shadow for plush look
+  const noiseOverlay = "url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIj48ZmlsdGVyIGlkPSJub2lzZSI+PGZlVHVyYnVsZW5jZSB0eXBlPSJmcmFjdGFsTm9pc2UiIGJhc2VGcmVxdWVuY3k9IjAuNjUiIG51bU9jdGF2ZXM9IjMiIHN0aXRjaFRpbGVzPSJzdGl0Y2giLz48L2ZpbHRlcj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWx0ZXI9InVybCgjbm9pc2UpIiBvcGFjaXR5PSIwLjUiLz48L3N2Zz4=')";
 
   return (
     <div 
@@ -75,11 +80,94 @@ const CartoonCat: React.FC<TypewriterCatProps> = ({ action, onAnimationEnd, look
       )}
 
       {/* --- THE FLUFFY CAT --- */}
-      <div className="relative w-full h-full flex items-center justify-center animate-breathe origin-bottom">
+      <div className="relative w-full h-full flex items-center justify-center animate-breathe origin-bottom" style={{ perspective: '1000px' }}>
         
+        {/* === TAIL (Behind Body) === */}
+        <div 
+            className="absolute top-[50%] left-1/2 w-full h-full z-0 pointer-events-none"
+            style={{ 
+                transform: `translateX(-50%) translateY(-50%) rotateY(${bodyRotateY * 0.5}deg)`,
+                transformStyle: 'preserve-3d'
+            }}
+        >
+             {/* Upright Slender Tail - Connected to Right Rear */}
+             <div className="absolute bottom-28 right-[150px] w-8 h-56 origin-bottom animate-tail-swish">
+                  <div className={`w-full h-full bg-gradient-to-t from-amber-500 via-amber-200 to-white rounded-full shadow-md`}>
+                        <div className="absolute inset-0 opacity-30 mix-blend-overlay rounded-full" style={{ backgroundImage: noiseOverlay }} />
+                  </div>
+             </div>
+        </div>
+
+        {/* === BODY GROUP === */}
+        <div 
+            className="absolute top-[42%] left-1/2 -translate-x-1/2 w-72 h-64 z-10"
+            style={{ 
+                transform: `translateX(-50%) rotateX(${bodyRotateX}deg) rotateY(${bodyRotateY}deg)`,
+                transformStyle: 'preserve-3d'
+            }}
+        >
+             {/* Spherical Main Body */}
+             <div className={`absolute inset-0 ${furGradient} rounded-[45%_45%_40%_40%] shadow-xl overflow-hidden`}>
+                {/* Shadow from Head casting down onto Body */}
+                <div className="absolute -top-6 left-1/2 -translate-x-1/2 w-48 h-24 bg-black/20 blur-xl rounded-full" />
+             </div>
+             
+             {/* Noise Texture */}
+             <div className="absolute inset-0 rounded-[45%_45%_40%_40%] opacity-30 mix-blend-overlay" style={{ backgroundImage: noiseOverlay }} />
+
+             {/* Belly Patch */}
+             <div className="absolute top-12 left-1/2 -translate-x-1/2 w-48 h-40 bg-white rounded-full blur-2xl opacity-70" />
+             
+             {/* Chest Fluff */}
+             <div className="absolute -top-4 left-1/2 -translate-x-1/2 w-32 h-20 bg-white/40 blur-lg rounded-full" />
+
+             {/* === HIND LEGS (Haunches) === */}
+             {/* Left Haunch */}
+             <div className={`absolute bottom-2 -left-4 w-28 h-28 ${furGradient} rounded-full shadow-inner z-10`}>
+                  <div className="absolute inset-0 opacity-30 mix-blend-overlay rounded-full" style={{ backgroundImage: noiseOverlay }} />
+                  <div className="absolute top-2 left-4 w-12 h-12 bg-white/20 blur-lg rounded-full" />
+             </div>
+             {/* Right Haunch */}
+             <div className={`absolute bottom-2 -right-4 w-28 h-28 ${furGradient} rounded-full shadow-inner z-10`}>
+                  <div className="absolute inset-0 opacity-30 mix-blend-overlay rounded-full" style={{ backgroundImage: noiseOverlay }} />
+                  <div className="absolute top-2 right-4 w-12 h-12 bg-white/20 blur-lg rounded-full" />
+             </div>
+
+             {/* === HIND FEET === */}
+             <div className="absolute bottom-2 left-10 w-16 h-10 bg-white rounded-[1.5rem] shadow-md z-20 flex justify-center items-end pb-2 transform -rotate-6 border-b-2 border-gray-100/50">
+                 <div className="w-1.5 h-4 bg-gray-200 rounded-full mx-1 opacity-50" />
+                 <div className="w-1.5 h-4 bg-gray-200 rounded-full mx-1 opacity-50" />
+             </div>
+             <div className="absolute bottom-2 right-10 w-16 h-10 bg-white rounded-[1.5rem] shadow-md z-20 flex justify-center items-end pb-2 transform rotate-6 border-b-2 border-gray-100/50">
+                 <div className="w-1.5 h-4 bg-gray-200 rounded-full mx-1 opacity-50" />
+                 <div className="w-1.5 h-4 bg-gray-200 rounded-full mx-1 opacity-50" />
+             </div>
+
+             {/* === FRONT ARMS (Resting in front/sides) === */}
+             {/* Left Arm */}
+             <div className="absolute top-16 left-4 w-14 h-32 bg-white rounded-[2rem] shadow-md transform -rotate-6 flex flex-col justify-end items-center pb-4 border-l-2 border-gray-100/50 z-20 origin-top">
+                <div className="w-[80%] h-full bg-gradient-to-b from-transparent to-gray-100/30 rounded-[2rem]" />
+                <div className="absolute bottom-2 flex gap-1.5">
+                    <div className="w-1 h-3 bg-gray-200 rounded-full" />
+                    <div className="w-1 h-3 bg-gray-200 rounded-full" />
+                    <div className="w-1 h-3 bg-gray-200 rounded-full" />
+                </div>
+             </div>
+             
+             {/* Right Arm */}
+             <div className="absolute top-16 right-4 w-14 h-32 bg-white rounded-[2rem] shadow-md transform rotate-6 flex flex-col justify-end items-center pb-4 border-r-2 border-gray-100/50 z-20 origin-top">
+                <div className="w-[80%] h-full bg-gradient-to-b from-transparent to-gray-100/30 rounded-[2rem]" />
+                <div className="absolute bottom-2 flex gap-1.5">
+                    <div className="w-1 h-3 bg-gray-200 rounded-full" />
+                    <div className="w-1 h-3 bg-gray-200 rounded-full" />
+                    <div className="w-1 h-3 bg-gray-200 rounded-full" />
+                </div>
+             </div>
+        </div>
+
         {/* === HEAD GROUP === */}
         <div 
-            className="absolute z-20 top-[15%]"
+            className="absolute z-20 top-[16%]"
             style={{ 
                 transform: `rotateX(${headRotateX}deg) rotateY(${headRotateY}deg)`,
                 transformStyle: 'preserve-3d'
@@ -89,6 +177,7 @@ const CartoonCat: React.FC<TypewriterCatProps> = ({ action, onAnimationEnd, look
             {/* Left Ear */}
             <div className={`absolute -top-14 left-4 w-24 h-28 ${furGradient} rounded-tl-[3rem] rounded-tr-xl transform -rotate-12 origin-bottom-right shadow-sm overflow-hidden`}>
                 <div className="absolute inset-0 bg-black/5 blur-sm" /> 
+                <div className="absolute inset-0 opacity-30 mix-blend-overlay" style={{ backgroundImage: noiseOverlay }} />
                 {/* Ear Fluff (White) */}
                 <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-12 h-16 bg-pink-100 rounded-full blur-[2px]" />
                 <div className="absolute bottom-4 left-2 w-4 h-8 bg-white rounded-full rotate-12 blur-[1px]" />
@@ -97,34 +186,69 @@ const CartoonCat: React.FC<TypewriterCatProps> = ({ action, onAnimationEnd, look
              {/* Right Ear */}
             <div className={`absolute -top-14 right-4 w-24 h-28 ${furGradient} rounded-tr-[3rem] rounded-tl-xl transform rotate-12 origin-bottom-left shadow-sm overflow-hidden`}>
                 <div className="absolute inset-0 bg-black/5 blur-sm" />
+                <div className="absolute inset-0 opacity-30 mix-blend-overlay" style={{ backgroundImage: noiseOverlay }} />
                 <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-12 h-16 bg-pink-100 rounded-full blur-[2px]" />
                 <div className="absolute bottom-4 left-2 w-4 h-8 bg-white rounded-full rotate-12 blur-[1px]" />
                 <div className="absolute bottom-4 right-2 w-4 h-8 bg-white rounded-full -rotate-12 blur-[1px]" />
             </div>
 
+            {/* --- DETAILED PINK BOW (Reference Style) --- */}
+            <div className="absolute -top-6 -right-10 w-36 h-28 z-50 transform rotate-12 pointer-events-none origin-center drop-shadow-md">
+                 {/* Left Loop */}
+                 <div className="absolute top-2 left-0 w-16 h-20 bg-[#ff9ecd] border-[3px] border-[#5e1914] rounded-[40%_60%_40%_40%_/_40%_40%_60%_60%] transform -rotate-[20deg] z-10 overflow-hidden shadow-inner">
+                      {/* Yellow Accent (Reference) */}
+                      <div className="absolute -top-2 -left-2 w-8 h-8 bg-yellow-300 blur-md opacity-60" />
+                      {/* Inner Crease */}
+                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-10 h-4 bg-[#db2777] rounded-full rotate-[-10deg] opacity-80" />
+                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-1 bg-[#fce7f3] rounded-full rotate-[-10deg] mt-1 opacity-60" />
+                      {/* Shine */}
+                      <div className="absolute top-2 left-2 w-6 h-3 bg-white rounded-full blur-[1px] opacity-90" />
+                 </div>
+
+                 {/* Right Loop */}
+                 <div className="absolute top-2 right-0 w-16 h-20 bg-[#ff9ecd] border-[3px] border-[#5e1914] rounded-[60%_40%_40%_40%_/_40%_40%_60%_60%] transform rotate-[20deg] z-10 overflow-hidden shadow-inner">
+                      {/* Inner Crease */}
+                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-10 h-4 bg-[#db2777] rounded-full rotate-[10deg] opacity-80" />
+                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-1 bg-[#fce7f3] rounded-full rotate-[10deg] mt-1 opacity-60" />
+                      {/* Shine */}
+                      <div className="absolute top-2 right-2 w-6 h-3 bg-white rounded-full blur-[1px] opacity-90" />
+                 </div>
+
+                 {/* Center Knot */}
+                 <div className="absolute top-6 left-1/2 -translate-x-1/2 w-11 h-12 bg-[#ff9ecd] border-[3px] border-[#5e1914] rounded-[30%] z-20 flex justify-center items-center shadow-lg">
+                     {/* Knot Folds */}
+                     <div className="w-[2px] h-6 bg-[#db2777] rounded-full opacity-60 mr-1.5" />
+                     <div className="w-[2px] h-6 bg-[#db2777] rounded-full opacity-60 ml-1.5" />
+                     {/* Shine */}
+                     <div className="absolute top-1.5 left-1.5 w-4 h-3 bg-white rounded-full blur-[0.5px] opacity-90" />
+                 </div>
+            </div>
+
             {/* -- Head Base (Oval + Tufts) -- */}
             <div className="relative w-72 h-60">
                 {/* Main Face Shape */}
-                <div className={`absolute inset-0 ${furGradient} ${furShadow} rounded-[45%] z-10`} />
+                <div className={`absolute inset-0 ${furGradient} ${furShadow} rounded-[45%] z-10 overflow-hidden`}>
+                     <div className="absolute inset-0 opacity-30 mix-blend-overlay" style={{ backgroundImage: noiseOverlay }} />
+                </div>
+
+                {/* Cheek Puffs for Chubby Face */}
+                <div className={`absolute bottom-[-10px] -left-6 w-28 h-28 ${furGradient} rounded-full z-10 shadow-inner overflow-hidden`}>
+                     <div className="absolute inset-0 opacity-30 mix-blend-overlay" style={{ backgroundImage: noiseOverlay }} />
+                </div>
+                <div className={`absolute bottom-[-10px] -right-6 w-28 h-28 ${furGradient} rounded-full z-10 shadow-inner overflow-hidden`}>
+                     <div className="absolute inset-0 opacity-30 mix-blend-overlay" style={{ backgroundImage: noiseOverlay }} />
+                </div>
 
                 {/* Fur Tufts (Breaking the silhouette) */}
                 {/* Top Head */}
                 <div className={`absolute -top-3 left-1/2 -translate-x-1/2 w-20 h-10 ${furGradient} rounded-full`} />
-                <div className={`absolute -top-4 left-28 w-6 h-8 ${furGradient} rounded-full rotate-12`} />
-                <div className={`absolute -top-4 right-28 w-6 h-8 ${furGradient} rounded-full -rotate-12`} />
                 
-                {/* Left Cheek Fluff */}
-                <div className={`absolute top-24 -left-3 w-8 h-12 ${furGradient} rounded-full -rotate-45`} />
-                <div className={`absolute top-32 -left-2 w-8 h-12 ${furGradient} rounded-full -rotate-[30deg]`} />
-                <div className={`absolute top-40 left-0 w-8 h-10 ${furGradient} rounded-full -rotate-12`} />
-                
-                {/* Right Cheek Fluff */}
-                <div className={`absolute top-24 -right-3 w-8 h-12 ${furGradient} rounded-full rotate-45`} />
-                <div className={`absolute top-32 -right-2 w-8 h-12 ${furGradient} rounded-full rotate-[30deg]`} />
-                <div className={`absolute top-40 right-0 w-8 h-10 ${furGradient} rounded-full rotate-12`} />
+                {/* Side Fluff */}
+                <div className={`absolute top-24 -left-8 w-8 h-12 ${furGradient} rounded-full -rotate-45`} />
+                <div className={`absolute top-24 -right-8 w-8 h-12 ${furGradient} rounded-full rotate-45`} />
 
                 {/* -- Face Details -- */}
-                <div className="absolute inset-0 z-20 overflow-hidden rounded-[45%]">
+                <div className="absolute inset-0 z-20 overflow-visible rounded-[45%]">
                      {/* Forehead Stripes (Softened) */}
                     <div className="absolute -top-4 left-1/2 -translate-x-1/2 w-20 h-20 bg-orange-500/20 rounded-full blur-md" />
                     <div className="absolute top-2 left-1/3 w-8 h-12 bg-orange-500/20 rounded-full blur-sm rotate-12" />
@@ -132,22 +256,25 @@ const CartoonCat: React.FC<TypewriterCatProps> = ({ action, onAnimationEnd, look
 
                     {/* White Face Mask (Cloud-like) */}
                     <div className="absolute bottom-[-10px] left-1/2 -translate-x-1/2 w-32 h-32 bg-white rounded-full blur-xl opacity-90" />
-                    <div className="absolute bottom-[-10px] left-10 w-28 h-28 bg-white rounded-full blur-lg opacity-80" />
-                    <div className="absolute bottom-[-10px] right-10 w-28 h-28 bg-white rounded-full blur-lg opacity-80" />
+                    <div className="absolute bottom-[-10px] left-8 w-32 h-32 bg-white rounded-full blur-lg opacity-80" />
+                    <div className="absolute bottom-[-10px] right-8 w-32 h-32 bg-white rounded-full blur-lg opacity-80" />
                     
                     {/* Blush */}
-                    <div className="absolute bottom-16 left-8 w-16 h-12 bg-pink-400/20 blur-xl rounded-full" />
-                    <div className="absolute bottom-16 right-8 w-16 h-12 bg-pink-400/20 blur-xl rounded-full" />
+                    <div className="absolute bottom-16 left-4 w-20 h-16 bg-pink-400/20 blur-xl rounded-full" />
+                    <div className="absolute bottom-16 right-4 w-20 h-16 bg-pink-400/20 blur-xl rounded-full" />
                 </div>
 
-                {/* Eyes */}
-                <div className="absolute top-20 left-0 w-full flex justify-center gap-10 px-4 z-30">
+                {/* Eyes - Moved DOWN for shorter mid-face */}
+                <div className="absolute top-28 left-0 w-full flex justify-center gap-8 px-4 z-30">
                     <CatEye isLeft={true} isSquinting={isSquinting} pupilX={pupilX} pupilY={pupilY} />
                     <CatEye isLeft={false} isSquinting={isSquinting} pupilX={pupilX} pupilY={pupilY} />
                 </div>
 
-                {/* Muzzle & Nose */}
+                {/* Muzzle & Nose - Moved UP for shorter mid-face */}
                 <div className="absolute top-40 left-1/2 -translate-x-1/2 w-40 h-28 flex flex-col items-center z-30">
+                    {/* 3D Muzzle Shape */}
+                    <div className="absolute -top-6 w-24 h-16 bg-white/90 blur-md rounded-full" />
+
                     {/* Nose */}
                     <div className={`relative w-8 h-6 bg-pink-400 rounded-[40%] shadow-sm mb-1 cursor-pointer hover:scale-110 transition-transform ${action === CatAction.SNEEZE ? 'animate-nose-wiggle' : ''}`}>
                         <div className="absolute top-1 left-2 w-3 h-2 bg-white/40 rounded-full" />
@@ -160,12 +287,12 @@ const CartoonCat: React.FC<TypewriterCatProps> = ({ action, onAnimationEnd, look
                     </div>
 
                     {/* Whiskers */}
-                    <div className="absolute top-5 left-[-40px] w-28 h-20 pointer-events-none">
+                    <div className="absolute top-2 left-[-45px] w-28 h-20 pointer-events-none">
                          <div className="h-[2px] w-full bg-gray-800/20 mb-3 transform rotate-6 origin-right rounded-full shadow-sm" />
                          <div className="h-[2px] w-full bg-gray-800/20 mb-3 transform rotate-0 origin-right rounded-full shadow-sm" />
                          <div className="h-[2px] w-full bg-gray-800/20 transform -rotate-6 origin-right rounded-full shadow-sm" />
                     </div>
-                    <div className="absolute top-5 right-[-40px] w-28 h-20 pointer-events-none">
+                    <div className="absolute top-2 right-[-45px] w-28 h-20 pointer-events-none">
                          <div className="h-[2px] w-full bg-gray-800/20 mb-3 transform -rotate-6 origin-left rounded-full shadow-sm" />
                          <div className="h-[2px] w-full bg-gray-800/20 mb-3 transform rotate-0 origin-left rounded-full shadow-sm" />
                          <div className="h-[2px] w-full bg-gray-800/20 transform rotate-6 origin-left rounded-full shadow-sm" />
@@ -173,7 +300,7 @@ const CartoonCat: React.FC<TypewriterCatProps> = ({ action, onAnimationEnd, look
                 </div>
 
                 {/* Collar */}
-                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-[90%] h-8 bg-red-500 rounded-full shadow-[inset_0_2px_4px_rgba(0,0,0,0.2)] z-40 flex justify-center items-center">
+                <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-[95%] h-8 bg-red-500 rounded-full shadow-[inset_0_2px_4px_rgba(0,0,0,0.2)] z-40 flex justify-center items-center">
                     <div className={`absolute top-3 w-10 h-10 bg-yellow-400 rounded-full border border-yellow-600 flex items-center justify-center shadow-lg ${isMoving(action) ? 'animate-bell-ring' : ''}`}>
                         <div className="w-full h-[1px] bg-yellow-700/50 absolute top-1/3" />
                         <div className="w-2 h-2 bg-yellow-800 rounded-full mt-3 opacity-80" />
@@ -183,41 +310,11 @@ const CartoonCat: React.FC<TypewriterCatProps> = ({ action, onAnimationEnd, look
             </div>
         </div>
 
-        {/* === BODY GROUP === */}
-        <div className="absolute top-[50%] left-1/2 -translate-x-1/2 w-64 h-52 z-10">
-             {/* Main Body */}
-             <div className={`absolute inset-0 ${furGradient} rounded-[3rem_3rem_2.5rem_2.5rem] shadow-xl`} />
-             
-             {/* Belly Patch (Soft Cloud) */}
-             <div className="absolute top-10 left-1/2 -translate-x-1/2 w-40 h-36 bg-white rounded-full blur-xl opacity-80" />
-             
-             {/* Body Fluff Tufts */}
-             <div className={`absolute top-10 -left-4 w-10 h-16 ${furGradient} rounded-full -rotate-12`} />
-             <div className={`absolute top-24 -left-3 w-10 h-16 ${furGradient} rounded-full -rotate-6`} />
-             
-             <div className={`absolute top-10 -right-4 w-10 h-16 ${furGradient} rounded-full rotate-12`} />
-             <div className={`absolute top-24 -right-3 w-10 h-16 ${furGradient} rounded-full rotate-6`} />
-
-             {/* Paws (White Mittens) */}
-             {/* Left Paw */}
-             <div className="absolute -bottom-4 left-6 w-24 h-16 bg-white rounded-[2rem] shadow-md transform -rotate-6 flex justify-center items-end pb-2 gap-2 border-b-4 border-gray-100">
-                <div className="w-1 h-5 bg-gray-200 rounded-full" />
-                <div className="w-1 h-5 bg-gray-200 rounded-full" />
-                <div className="w-1 h-5 bg-gray-200 rounded-full" />
-             </div>
-             {/* Right Paw */}
-             <div className="absolute -bottom-4 right-6 w-24 h-16 bg-white rounded-[2rem] shadow-md transform rotate-6 flex justify-center items-end pb-2 gap-2 border-b-4 border-gray-100">
-                <div className="w-1 h-5 bg-gray-200 rounded-full" />
-                <div className="w-1 h-5 bg-gray-200 rounded-full" />
-                <div className="w-1 h-5 bg-gray-200 rounded-full" />
-             </div>
-        </div>
-
       </div>
 
       <style>{`
         .animate-breathe {
-            animation: breathe 3s ease-in-out infinite;
+            animation: breathe 4s ease-in-out infinite;
         }
         .animate-nose-wiggle {
             animation: noseWiggle 0.3s ease-in-out infinite;
@@ -225,6 +322,9 @@ const CartoonCat: React.FC<TypewriterCatProps> = ({ action, onAnimationEnd, look
         .animate-bell-ring {
             animation: bellRing 0.5s ease-in-out infinite;
             transform-origin: top center;
+        }
+        .animate-tail-swish {
+            animation: tailSwish 4s ease-in-out infinite;
         }
         
         /* Droplet Animations */
@@ -248,6 +348,11 @@ const CartoonCat: React.FC<TypewriterCatProps> = ({ action, onAnimationEnd, look
             0%, 100% { transform: rotate(0deg); }
             25% { transform: rotate(25deg); }
             75% { transform: rotate(-25deg); }
+        }
+
+        @keyframes tailSwish {
+            0%, 100% { transform: rotate(0deg); }
+            50% { transform: rotate(8deg) translateX(4px); }
         }
 
         @keyframes spin {
@@ -283,7 +388,7 @@ const CartoonCat: React.FC<TypewriterCatProps> = ({ action, onAnimationEnd, look
 
         @keyframes breathe {
           0%, 100% { transform: scale(1) translateY(0); }
-          50% { transform: scale(1.02) translateY(-6px); }
+          50% { transform: scale(1.03) translateY(-8px); }
         }
       `}</style>
     </div>
@@ -300,20 +405,38 @@ interface CatEyeProps {
 }
 
 const CatEye: React.FC<CatEyeProps> = ({ isLeft, isSquinting, pupilX, pupilY }) => {
+    // Determine lash transform based on side
+    // If Left Eye (screen left), lashes on left side.
+    // If Right Eye (screen right), lashes on right side (flipped).
+    const lashStyle = isLeft ? {} : { transform: 'scaleX(-1)' };
+
     return (
-        <div className="relative w-20 h-20 flex items-center justify-center">
-            {/* Open Eye */}
-            <div className={`absolute inset-0 bg-white rounded-full shadow-md overflow-hidden transition-all duration-150 ease-in-out ${isSquinting ? 'opacity-0 scale-90' : 'opacity-100 scale-100'}`}>
+        <div className="relative w-24 h-24 flex items-center justify-center">
+            {/* Open Eye Lashes (Curved & Cute) */}
+            <div 
+                className={`absolute top-0 -left-1 w-full h-full z-20 pointer-events-none transition-opacity duration-150 ${isSquinting ? 'opacity-0' : 'opacity-100'}`}
+                style={lashStyle}
+            >
+                 <svg width="100%" height="100%" viewBox="0 0 100 100">
+                    <path d="M 18 35 Q 5 25 2 10" stroke="#1f2937" strokeWidth="3" fill="none" strokeLinecap="round" />
+                    <path d="M 16 42 Q 2 38 0 25" stroke="#1f2937" strokeWidth="3" fill="none" strokeLinecap="round" />
+                    <path d="M 18 50 Q 5 50 2 40" stroke="#1f2937" strokeWidth="3" fill="none" strokeLinecap="round" />
+                 </svg>
+            </div>
+
+            {/* Open Eye Ball */}
+            <div className={`absolute inset-2 bg-white rounded-full shadow-md overflow-hidden transition-all duration-150 ease-in-out z-10 ${isSquinting ? 'opacity-0 scale-90' : 'opacity-100 scale-100'}`}>
                 {/* Iris */}
                 <div 
-                    className="absolute w-14 h-14 bg-sky-500 rounded-full top-1/2 left-1/2 shadow-inner"
+                    className="absolute w-16 h-16 bg-sky-500 rounded-full top-1/2 left-1/2 shadow-inner"
                     style={{ transform: `translate(-50%, -50%) translate(${pupilX}px, ${pupilY}px)` }}
                 >
                     {/* Pupil */}
-                    <div className="absolute w-8 h-8 bg-gray-900 rounded-full top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" />
+                    <div className="absolute w-10 h-10 bg-gray-900 rounded-full top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" />
                     {/* Highlights */}
-                    <div className="absolute w-5 h-4 bg-white rounded-full top-2 right-3 opacity-90 blur-[0.5px]" />
-                    <div className="absolute w-2 h-2 bg-white rounded-full bottom-3 left-4 opacity-60 blur-[0.5px]" />
+                    <div className="absolute w-6 h-5 bg-white rounded-full top-3 right-3 opacity-95 blur-[0.5px]" />
+                    <div className="absolute w-3 h-3 bg-white rounded-full bottom-4 left-4 opacity-70 blur-[0.5px]" />
+                    <div className="absolute w-2 h-2 bg-pink-200 rounded-full bottom-7 left-3 opacity-80 blur-[0px]" />
                 </div>
             </div>
 
