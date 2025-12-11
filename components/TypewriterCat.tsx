@@ -8,6 +8,100 @@ interface TypewriterCatProps {
   lookAt: { x: number, y: number } | null; // Coordinates -1 to 1
 }
 
+const CatEye: React.FC<{ isLeft: boolean, isSquinting: boolean, pupilX: number, pupilY: number }> = ({ isLeft, isSquinting, pupilX, pupilY }) => (
+  <div className="relative w-24 h-24">
+    {/* Eyeball Container - Inner part clips the pupil */}
+    <div className="absolute inset-0 w-full h-full bg-white rounded-full shadow-[inset_0_4px_10px_rgba(0,0,0,0.2)] overflow-hidden flex items-center justify-center border border-gray-100 z-10">
+        {!isSquinting ? (
+          <>
+            {/* Open Eye - Pupil/Iris Container */}
+            <div 
+              className="w-20 h-20 bg-[#0f172a] rounded-full flex items-center justify-center relative shadow-inner"
+              style={{ transform: `translate(${pupilX}px, ${pupilY}px)` }}
+            >
+                {/* Iris Color */}
+                <div className="absolute inset-1 bg-gradient-to-b from-emerald-400 to-emerald-700 rounded-full opacity-80" />
+                {/* Large Pupil */}
+                <div className="absolute inset-3 bg-black rounded-full" />
+                {/* Highlights */}
+                <div className="absolute top-4 left-4 w-6 h-5 bg-white rounded-[50%] blur-[1px]" />
+                <div className="absolute bottom-5 right-6 w-2.5 h-2.5 bg-white rounded-full opacity-70" />
+            </div>
+          </>
+        ) : (
+          // Squinting Eye (Happy ^ shape with lashes)
+          <svg className="w-full h-full p-2" viewBox="0 0 100 100">
+              <path 
+                d="M 20 60 Q 50 30 80 60" 
+                fill="none" 
+                stroke="#1e293b" 
+                strokeWidth="8" 
+                strokeLinecap="round"
+              />
+              {/* Squint Lashes */}
+              {isLeft ? (
+                <>
+                    <path d="M 18 62 Q 10 55 5 45" stroke="#1e293b" strokeWidth="6" strokeLinecap="round" />
+                    <path d="M 22 65 Q 15 75 10 85" stroke="#1e293b" strokeWidth="6" strokeLinecap="round" />
+                </>
+              ) : (
+                <>
+                    <path d="M 82 62 Q 90 55 95 45" stroke="#1e293b" strokeWidth="6" strokeLinecap="round" />
+                    <path d="M 78 65 Q 85 75 90 85" stroke="#1e293b" strokeWidth="6" strokeLinecap="round" />
+                </>
+              )}
+          </svg>
+        )}
+    </div>
+
+    {/* EYELINER - HALF-WRAP ON EDGE */}
+    {!isSquinting && (
+        <svg className="absolute inset-0 w-full h-full z-[15] pointer-events-none" viewBox="0 0 100 100" style={{ overflow: 'visible' }}>
+            {isLeft ? (
+                /* Left Eye: Thick Outer Wing (Left), Tapers to Inner Corner (Right) */
+                /* Raised anchors to y=38, top arch y=-25 */
+                <path 
+                    d="M -5 38 Q 50 -25 105 38 L 105 38 Q 50 -15 -5 45 Z"
+                    fill="#0f172a"
+                />
+            ) : (
+                /* Right Eye: Thin Inner Corner (Left), Thick Outer Wing (Right) */
+                <path 
+                    d="M -5 38 Q 50 -25 105 38 L 105 45 Q 50 -15 -5 38 Z"
+                    fill="#0f172a"
+                />
+            )}
+        </svg>
+    )}
+
+    {/* OPEN EYE LASHES - Positioned relative to container, z-20 to sit on top of everything */}
+    {/* Shifted UP to match y=38 eyeliner (approx +7px shift -> y=45 area) */}
+    {!isSquinting && (
+        <svg 
+            className={`absolute z-20 w-32 h-32 text-[#0f172a] pointer-events-none ${isLeft ? '-left-10 -top-6' : '-right-10 -top-6'}`} 
+            viewBox="0 0 100 100"
+            style={{ filter: 'drop-shadow(0px 1px 0px rgba(255,255,255,0.2))' }}
+        >
+            {isLeft ? (
+                /* Left Eye (Lashes on Left Outer Corner) */
+                <g fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                    <path d="M 30 45 Q 15 35 12 23" />
+                    <path d="M 30 49 Q 18 45 15 37" />
+                </g>
+            ) : (
+                /* Right Eye (Lashes on Right Outer Corner) */
+                <g fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                    <path d="M 70 45 Q 85 35 88 23" />
+                    <path d="M 70 49 Q 82 45 85 37" />
+                </g>
+            )}
+        </svg>
+    )}
+  </div>
+);
+
+const isMoving = (action: CatAction) => action !== CatAction.IDLE && action !== CatAction.LAY;
+
 const CartoonCat: React.FC<TypewriterCatProps> = ({ action, onAnimationEnd, lookAt }) => {
   const [blinking, setBlinking] = useState(false);
 
@@ -82,22 +176,6 @@ const CartoonCat: React.FC<TypewriterCatProps> = ({ action, onAnimationEnd, look
       {/* --- THE FLUFFY CAT --- */}
       <div className="relative w-full h-full flex items-center justify-center animate-breathe origin-bottom" style={{ perspective: '1000px' }}>
         
-        {/* === TAIL (Behind Body) === */}
-        <div 
-            className="absolute top-[50%] left-1/2 w-full h-full z-0 pointer-events-none"
-            style={{ 
-                transform: `translateX(-50%) translateY(-50%) rotateY(${bodyRotateY * 0.5}deg)`,
-                transformStyle: 'preserve-3d'
-            }}
-        >
-             {/* Upright Slender Tail - Connected to Right Rear */}
-             <div className="absolute bottom-28 right-[150px] w-8 h-56 origin-bottom animate-tail-swish">
-                  <div className={`w-full h-full bg-gradient-to-t from-amber-500 via-amber-200 to-white rounded-full shadow-md`}>
-                        <div className="absolute inset-0 opacity-30 mix-blend-overlay rounded-full" style={{ backgroundImage: noiseOverlay }} />
-                  </div>
-             </div>
-        </div>
-
         {/* === BODY GROUP === */}
         <div 
             className="absolute top-[42%] left-1/2 -translate-x-1/2 w-72 h-64 z-10"
@@ -106,6 +184,46 @@ const CartoonCat: React.FC<TypewriterCatProps> = ({ action, onAnimationEnd, look
                 transformStyle: 'preserve-3d'
             }}
         >
+             {/* === TAIL (Matches Reference: Big, Fluffy, S-Curve) === */}
+             <div 
+                 className="absolute bottom-8 -right-4 w-48 h-80 origin-bottom-left z-[-10]"
+                 style={{ 
+                     transform: 'translateZ(-60px) rotate(25deg)', 
+                 }}
+             >
+                 {/* Inner Animator for Swish or Wag */}
+                 {/* CONDITIONAL ANIMATION: Use wag if active, otherwise swish */}
+                 <div className={`w-full h-full origin-bottom-left relative ${action === CatAction.TAIL_WAG ? 'animate-tail-wag' : 'animate-tail-swish'}`}>
+                     {/* Tail Body - S-Curve using Clip Path */}
+                     <div className="absolute inset-0 bg-gradient-to-t from-amber-600 via-amber-300 to-white shadow-xl"
+                          style={{
+                              maskImage: 'linear-gradient(to top, black 80%, transparent 100%)',
+                              clipPath: 'path("M 30 300 C 30 250, -20 180, 40 100 S 160 10, 160 60 C 160 110, 100 180, 80 300 Z")', // S-Shape
+                              width: '100%',
+                              height: '100%',
+                          }}
+                     >
+                        <div className="absolute inset-0 opacity-30 mix-blend-overlay" style={{ backgroundImage: noiseOverlay }} />
+                     </div>
+                     
+                     {/* -- Additional Fluff Tufts (The "Broken Line" Effect) -- */}
+                     {/* Tip Fluff */}
+                     <div className="absolute top-[10%] right-[10%] w-20 h-20 bg-white rounded-full blur-md opacity-90" />
+                     
+                     {/* Outer Curve Tufts (Right Side) */}
+                     <div className="absolute top-[25%] right-[-5%] w-14 h-16 bg-amber-200 rounded-full blur-[4px] rotate-12" />
+                     <div className="absolute top-[45%] right-[0%] w-16 h-16 bg-amber-300 rounded-full blur-[4px]" />
+                     <div className="absolute bottom-[20%] right-[10%] w-16 h-20 bg-amber-400 rounded-full blur-[5px]" />
+                     
+                     {/* Inner Curve Tufts (Left Side) */}
+                     <div className="absolute top-[20%] left-[15%] w-12 h-12 bg-white rounded-full blur-[3px]" />
+                     <div className="absolute top-[40%] left-[5%] w-14 h-14 bg-amber-300 rounded-full blur-[3px]" />
+                     
+                     {/* Base Seamless Blender */}
+                     <div className="absolute bottom-0 left-[10%] w-28 h-24 bg-amber-500 blur-xl rounded-full" />
+                 </div>
+             </div>
+
              {/* Spherical Main Body */}
              <div className={`absolute inset-0 ${furGradient} rounded-[45%_45%_40%_40%] shadow-xl overflow-hidden`}>
                 {/* Shadow from Head casting down onto Body */}
@@ -281,9 +399,10 @@ const CartoonCat: React.FC<TypewriterCatProps> = ({ action, onAnimationEnd, look
                     </div>
                     
                     {/* Mouth */}
-                    <div className="flex -mt-3 opacity-80">
-                         <div className="w-8 h-8 border-b-[4px] border-r-[4px] border-gray-700 rounded-br-[20px] transform rotate-45" />
-                         <div className="w-8 h-8 border-b-[4px] border-l-[4px] border-gray-700 rounded-bl-[20px] transform -rotate-45" />
+                    <div className="flex -mt-2 opacity-80">
+                         {/* Reduced size w-6 h-6, adjusted border thickness */}
+                         <div className="w-6 h-6 border-b-[3px] border-r-[3px] border-gray-700 rounded-br-[20px] transform rotate-45" />
+                         <div className="w-6 h-6 border-b-[3px] border-l-[3px] border-gray-700 rounded-bl-[20px] transform -rotate-45" />
                     </div>
 
                     {/* Whiskers */}
@@ -324,7 +443,10 @@ const CartoonCat: React.FC<TypewriterCatProps> = ({ action, onAnimationEnd, look
             transform-origin: top center;
         }
         .animate-tail-swish {
-            animation: tailSwish 4s ease-in-out infinite;
+            animation: tailSwish 4s ease-in-out infinite alternate;
+        }
+        .animate-tail-wag {
+            animation: tailWag 0.2s ease-in-out infinite;
         }
         
         /* Droplet Animations */
@@ -351,8 +473,14 @@ const CartoonCat: React.FC<TypewriterCatProps> = ({ action, onAnimationEnd, look
         }
 
         @keyframes tailSwish {
-            0%, 100% { transform: rotate(0deg); }
-            50% { transform: rotate(8deg) translateX(4px); }
+            0% { transform: rotate(-5deg); }
+            100% { transform: rotate(5deg); }
+        }
+        
+        @keyframes tailWag {
+            0% { transform: rotate(10deg) scale(1.1); }
+            50% { transform: rotate(50deg) scale(1.1); }
+            100% { transform: rotate(10deg) scale(1.1); }
         }
 
         @keyframes spin {
@@ -388,81 +516,11 @@ const CartoonCat: React.FC<TypewriterCatProps> = ({ action, onAnimationEnd, look
 
         @keyframes breathe {
           0%, 100% { transform: scale(1) translateY(0); }
-          50% { transform: scale(1.03) translateY(-8px); }
+          50% { transform: scale(1.03) translateY(-5px); }
         }
       `}</style>
     </div>
   );
 };
-
-// --- Sub-Components ---
-
-interface CatEyeProps {
-    isLeft: boolean;
-    isSquinting: boolean;
-    pupilX: number;
-    pupilY: number;
-}
-
-const CatEye: React.FC<CatEyeProps> = ({ isLeft, isSquinting, pupilX, pupilY }) => {
-    // Determine lash transform based on side
-    // If Left Eye (screen left), lashes on left side.
-    // If Right Eye (screen right), lashes on right side (flipped).
-    const lashStyle = isLeft ? {} : { transform: 'scaleX(-1)' };
-
-    return (
-        <div className="relative w-24 h-24 flex items-center justify-center">
-            {/* Open Eye Lashes (Curved & Cute) */}
-            <div 
-                className={`absolute top-0 -left-1 w-full h-full z-20 pointer-events-none transition-opacity duration-150 ${isSquinting ? 'opacity-0' : 'opacity-100'}`}
-                style={lashStyle}
-            >
-                 <svg width="100%" height="100%" viewBox="0 0 100 100">
-                    <path d="M 18 35 Q 5 25 2 10" stroke="#1f2937" strokeWidth="3" fill="none" strokeLinecap="round" />
-                    <path d="M 16 42 Q 2 38 0 25" stroke="#1f2937" strokeWidth="3" fill="none" strokeLinecap="round" />
-                    <path d="M 18 50 Q 5 50 2 40" stroke="#1f2937" strokeWidth="3" fill="none" strokeLinecap="round" />
-                 </svg>
-            </div>
-
-            {/* Open Eye Ball */}
-            <div className={`absolute inset-2 bg-white rounded-full shadow-md overflow-hidden transition-all duration-150 ease-in-out z-10 ${isSquinting ? 'opacity-0 scale-90' : 'opacity-100 scale-100'}`}>
-                {/* Iris */}
-                <div 
-                    className="absolute w-16 h-16 bg-sky-500 rounded-full top-1/2 left-1/2 shadow-inner"
-                    style={{ transform: `translate(-50%, -50%) translate(${pupilX}px, ${pupilY}px)` }}
-                >
-                    {/* Pupil */}
-                    <div className="absolute w-10 h-10 bg-gray-900 rounded-full top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" />
-                    {/* Highlights */}
-                    <div className="absolute w-6 h-5 bg-white rounded-full top-3 right-3 opacity-95 blur-[0.5px]" />
-                    <div className="absolute w-3 h-3 bg-white rounded-full bottom-4 left-4 opacity-70 blur-[0.5px]" />
-                    <div className="absolute w-2 h-2 bg-pink-200 rounded-full bottom-7 left-3 opacity-80 blur-[0px]" />
-                </div>
-            </div>
-
-            {/* Closed/Squinting Eye */}
-            <div className={`absolute inset-0 z-10 flex items-center justify-center transition-all duration-150 ease-in-out ${isSquinting ? 'opacity-100 scale-100' : 'opacity-0 scale-110'}`}>
-                <svg width="100%" height="100%" viewBox="0 0 80 80" className="drop-shadow-sm overflow-visible">
-                     <path d="M 15 50 Q 40 15 65 50" fill="transparent" stroke="#1f2937" strokeWidth="6" strokeLinecap="round" />
-                     {isLeft ? (
-                         <>
-                             <path d="M 18 45 L 8 35" stroke="#1f2937" strokeWidth="5" strokeLinecap="round" />
-                             <path d="M 25 35 L 18 22" stroke="#1f2937" strokeWidth="5" strokeLinecap="round" />
-                         </>
-                     ) : (
-                         <>
-                             <path d="M 62 45 L 72 35" stroke="#1f2937" strokeWidth="5" strokeLinecap="round" />
-                             <path d="M 55 35 L 62 22" stroke="#1f2937" strokeWidth="5" strokeLinecap="round" />
-                         </>
-                     )}
-                </svg>
-            </div>
-        </div>
-    );
-};
-
-function isMoving(action: CatAction): boolean {
-    return action === CatAction.JUMP || action === CatAction.SPIN || action === CatAction.SNEEZE || action === CatAction.SHAKE;
-}
 
 export default CartoonCat;

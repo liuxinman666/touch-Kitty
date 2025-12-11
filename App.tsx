@@ -5,10 +5,10 @@ import { visionService } from './services/visionService';
 import { CatAction, Point } from './types';
 
 // Interaction Config
-// Increased thresholds because cat is now bigger on screen
 const NOSE_THRESHOLD = 0.12; 
 const HEAD_THRESHOLD = 0.28; 
-const ACTION_DURATION_MS = 1000; // Reduced to 1s for snappier feedback
+const TAIL_THRESHOLD = 0.15; 
+const ACTION_DURATION_MS = 1000; 
 
 // Simple linear interpolation for smoothing
 const lerp = (start: number, end: number, factor: number) => start + (end - start) * factor;
@@ -55,9 +55,10 @@ export default function App() {
             predictWebcam();
           });
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error(err);
-        setDebugMsg(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        const msg = err?.message || (typeof err === 'object' ? JSON.stringify(err) : String(err));
+        setDebugMsg(`Error: ${msg}`);
       }
     };
 
@@ -70,11 +71,17 @@ export default function App() {
   }, []);
 
   const triggerAction = useCallback((action: CatAction) => {
-    if (isAnimating.current) return;
+    if (isAnimating.current && action !== CatAction.TAIL_WAG) return;
     
-    isAnimating.current = true;
-    setCatAction(action);
-    setDebugMsg(`Reacting: ${action}!`);
+    if (action === CatAction.TAIL_WAG) {
+        setCatAction(CatAction.TAIL_WAG);
+        isAnimating.current = true;
+        setDebugMsg("Tail Wag!");
+    } else {
+        isAnimating.current = true;
+        setCatAction(action);
+        setDebugMsg(`Reacting: ${action}!`);
+    }
 
     setTimeout(() => {
         setCatAction(CatAction.IDLE);
@@ -86,76 +93,81 @@ export default function App() {
   const predictWebcam = () => {
     if (!videoRef.current) return;
     
-    const results = visionService.detect(videoRef.current, Date.now());
-
-    if (results && results.landmarks && results.landmarks.length > 0) {
-      const landmarks = results.landmarks[0]; // Just track one hand for simplicity
-
-      // 8: Index Tip, 9: Middle MCP (Palm)
-      const indexTip = landmarks[8];
-      const palmCenter = landmarks[9]; 
-
-      // Mirror X for user-facing camera logic
-      const targetFingerX = 1 - indexTip.x;
-      const targetFingerY = indexTip.y;
-      
-      const targetPalmX = 1 - palmCenter.x;
-      const targetPalmY = palmCenter.y;
-
-      // Smooth the raw inputs
-      rawFinger.current.x = lerp(rawFinger.current.x, targetFingerX, 0.2);
-      rawFinger.current.y = lerp(rawFinger.current.y, targetFingerY, 0.2);
-      
-      rawPalm.current.x = lerp(rawPalm.current.x, targetPalmX, 0.2);
-      rawPalm.current.y = lerp(rawPalm.current.y, targetPalmY, 0.2);
-
-      // Update React State for Cursors
-      setCursorFinger({ ...rawFinger.current });
-      setCursorPalm({ ...rawPalm.current });
-
-      // Cat Logic
-      const fX = rawFinger.current.x;
-      const fY = rawFinger.current.y;
-      const pX = rawPalm.current.x;
-      const pY = rawPalm.current.y;
-
-      // Calculate "Look At" vector (Relative to center 0.5, 0.5)
-      const lookX = (pX - 0.5) * 2;
-      const lookY = (pY - 0.5) * 2;
-      
-      // Smooth lookAt - slightly faster smoothing (0.15) for more flexible feel
-      lookAtRef.current.x = lerp(lookAtRef.current.x, lookX, 0.15);
-      lookAtRef.current.y = lerp(lookAtRef.current.y, lookY, 0.15);
-      setCatLookAt({ x: lookAtRef.current.x, y: lookAtRef.current.y });
-
-      // Hit Testing - Updated for the new large centered cat
-      // Head is roughly top 40%, Nose is center 50%
-      const catHeadTarget: Point = { x: 0.5, y: 0.35 }; 
-      const catNoseTarget: Point = { x: 0.5, y: 0.5 };
-
-      const distFingerToNose = Math.hypot(fX - catNoseTarget.x, fY - catNoseTarget.y);
-      const distPalmToHead = Math.hypot(pX - catHeadTarget.x, pY - catHeadTarget.y);
-
-      if (!isAnimating.current) {
-          // Priority: Nose first
-          if (distFingerToNose < NOSE_THRESHOLD) {
-              triggerAction(CatAction.SNEEZE);
+    try {
+        const results = visionService.detect(videoRef.current, Date.now());
+    
+        if (results && results.landmarks && results.landmarks.length > 0) {
+          const landmarks = results.landmarks[0]; // Just track one hand
+    
+          // 8: Index Tip, 9: Middle MCP (Palm)
+          const indexTip = landmarks[8];
+          const palmCenter = landmarks[9]; 
+    
+          // Mirror X for user-facing camera logic
+          const targetFingerX = 1 - indexTip.x;
+          const targetFingerY = indexTip.y;
+          
+          const targetPalmX = 1 - palmCenter.x;
+          const targetPalmY = palmCenter.y;
+    
+          // Smooth the raw inputs
+          rawFinger.current.x = lerp(rawFinger.current.x, targetFingerX, 0.2);
+          rawFinger.current.y = lerp(rawFinger.current.y, targetFingerY, 0.2);
+          
+          rawPalm.current.x = lerp(rawPalm.current.x, targetPalmX, 0.2);
+          rawPalm.current.y = lerp(rawPalm.current.y, targetPalmY, 0.2);
+    
+          // Update React State for Cursors
+          setCursorFinger({ ...rawFinger.current });
+          setCursorPalm({ ...rawPalm.current });
+    
+          // Cat Logic
+          const fX = rawFinger.current.x;
+          const fY = rawFinger.current.y;
+          const pX = rawPalm.current.x;
+          const pY = rawPalm.current.y;
+    
+          // Calculate "Look At" vector (Relative to center 0.5, 0.5)
+          const lookX = (pX - 0.5) * 2;
+          const lookY = (pY - 0.5) * 2;
+          
+          lookAtRef.current.x = lerp(lookAtRef.current.x, lookX, 0.15);
+          lookAtRef.current.y = lerp(lookAtRef.current.y, lookY, 0.15);
+          setCatLookAt({ x: lookAtRef.current.x, y: lookAtRef.current.y });
+    
+          // Hit Testing
+          const catHeadTarget: Point = { x: 0.5, y: 0.35 }; 
+          const catNoseTarget: Point = { x: 0.5, y: 0.5 };
+          const catTailTarget: Point = { x: 0.68, y: 0.75 };
+    
+          const distFingerToNose = Math.hypot(fX - catNoseTarget.x, fY - catNoseTarget.y);
+          const distPalmToHead = Math.hypot(pX - catHeadTarget.x, pY - catHeadTarget.y);
+          const distFingerToTail = Math.hypot(fX - catTailTarget.x, fY - catTailTarget.y);
+    
+          if (!isAnimating.current || catAction === CatAction.TAIL_WAG) {
+              if (distFingerToNose < NOSE_THRESHOLD) {
+                  triggerAction(CatAction.SNEEZE);
+              }
+              else if (distFingerToTail < TAIL_THRESHOLD) {
+                  triggerAction(CatAction.TAIL_WAG);
+              }
+              else if (distPalmToHead < HEAD_THRESHOLD) {
+                  const possibleActions = [CatAction.JUMP, CatAction.SPIN, CatAction.SHAKE];
+                  const randomAction = possibleActions[Math.floor(Math.random() * possibleActions.length)];
+                  triggerAction(randomAction);
+              }
           }
-          else if (distPalmToHead < HEAD_THRESHOLD) {
-              // Randomly choose between Jump, Spin, or Shake for variety
-              const possibleActions = [CatAction.JUMP, CatAction.SPIN, CatAction.SHAKE];
-              const randomAction = possibleActions[Math.floor(Math.random() * possibleActions.length)];
-              triggerAction(randomAction);
-          }
-      }
-    } else {
-        // No hand detected
-        setCursorFinger(null);
-        setCursorPalm(null);
-        // Slowly return look to center
-        lookAtRef.current.x = lerp(lookAtRef.current.x, 0, 0.05);
-        lookAtRef.current.y = lerp(lookAtRef.current.y, 0, 0.05);
-        setCatLookAt({ x: lookAtRef.current.x, y: lookAtRef.current.y });
+        } else {
+            // No hand detected
+            setCursorFinger(null);
+            setCursorPalm(null);
+            lookAtRef.current.x = lerp(lookAtRef.current.x, 0, 0.05);
+            lookAtRef.current.y = lerp(lookAtRef.current.y, 0, 0.05);
+            setCatLookAt({ x: lookAtRef.current.x, y: lookAtRef.current.y });
+        }
+    } catch (e: any) {
+        // Log but don't crash loop immediately, maybe one bad frame
+        console.warn("Prediction Error:", e);
     }
 
     requestRef.current = requestAnimationFrame(predictWebcam);
@@ -182,14 +194,14 @@ export default function App() {
         />
       </div>
 
-      {/* Visual Cursors for Interaction Feedback */}
+      {/* Visual Cursors */}
       {cursorFinger && (
           <div 
             className="absolute z-20 pointer-events-none text-4xl drop-shadow-lg transition-transform duration-75"
             style={{ 
                 left: `${cursorFinger.x * 100}%`, 
                 top: `${cursorFinger.y * 100}%`,
-                transform: 'translate(-50%, -100%)' // Tip of finger at point
+                transform: 'translate(-50%, -100%)' 
             }}
           >
               👆
@@ -217,7 +229,9 @@ export default function App() {
             </h1>
             <div className="flex items-center gap-2 mb-4">
                 <div className={`w-3 h-3 rounded-full ${loaded ? 'bg-green-400 shadow-[0_0_10px_#4ade80]' : 'bg-red-400'}`} />
-                <span className="text-xs uppercase tracking-wider font-bold text-gray-300">{debugMsg}</span>
+                <span className="text-xs uppercase tracking-wider font-bold text-gray-300">
+                  {typeof debugMsg === 'string' ? debugMsg : 'Processing...'}
+                </span>
             </div>
             
             <div className="space-y-4">
@@ -238,6 +252,16 @@ export default function App() {
                     <div>
                         <p className="text-sm font-bold text-white">Boop Nose</p>
                         <p className="text-xs text-blue-200/70">Finger on nose = Sneeze</p>
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-4 group">
+                    <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
+                        🌿
+                    </div>
+                    <div>
+                        <p className="text-sm font-bold text-white">Tickle Tail</p>
+                        <p className="text-xs text-green-200/70">Touch tail = Happy Wag</p>
                     </div>
                 </div>
             </div>

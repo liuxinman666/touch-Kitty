@@ -5,7 +5,8 @@ export enum CatAction {
   JUMP = 'JUMP',
   LAY = 'LAY',
   SNEEZE = 'SNEEZE',
-  SHAKE = 'SHAKE'
+  SHAKE = 'SHAKE',
+  TAIL_WAG = 'TAIL_WAG'
 }
 
 export interface Point {
