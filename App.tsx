@@ -4,10 +4,10 @@ import TypewriterCat from './components/TypewriterCat';
 import { visionService } from './services/visionService';
 import { CatAction, Point } from './types';
 
-// Interaction Config
-const NOSE_THRESHOLD = 0.12; 
-const HEAD_THRESHOLD = 0.28; 
-const TAIL_THRESHOLD = 0.15; 
+// Interaction Config (Adjusted for 1.25x scale)
+const NOSE_THRESHOLD = 0.15; 
+const HEAD_THRESHOLD = 0.35; 
+const TAIL_THRESHOLD = 0.20; 
 const ACTION_DURATION_MS = 1000; 
 
 // Simple linear interpolation for smoothing
@@ -15,10 +15,12 @@ const lerp = (start: number, end: number, factor: number) => start + (end - star
 
 export default function App() {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const requestRef = useRef<number>();
+  const requestRef = useRef<number | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [catAction, setCatAction] = useState<CatAction>(CatAction.IDLE);
   const [debugMsg, setDebugMsg] = useState("Initializing Vision...");
+  const [furColor, setFurColor] = useState<'amber' | 'pink' | 'blue'>('amber');
+  const [bowColor, setBowColor] = useState<'pink' | 'red' | 'black' | 'purple'>('pink');
   
   // Track smoothed positions for visual cursors
   const [cursorFinger, setCursorFinger] = useState<Point | null>(null);
@@ -41,8 +43,8 @@ export default function App() {
 
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
-            width: 1280,
-            height: 720,
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
             facingMode: 'user'
           }
         });
@@ -57,8 +59,13 @@ export default function App() {
         }
       } catch (err: any) {
         console.error(err);
-        const msg = err?.message || (typeof err === 'object' ? JSON.stringify(err) : String(err));
-        setDebugMsg(`Error: ${msg}`);
+        let msg = "Camera Error";
+        if (err.name === 'NotAllowedError') {
+             msg = "Permission Denied. Please allow camera access.";
+        } else {
+             msg = err?.message || (typeof err === 'object' ? JSON.stringify(err) : String(err));
+        }
+        setDebugMsg(msg);
       }
     };
 
@@ -135,10 +142,10 @@ export default function App() {
           lookAtRef.current.y = lerp(lookAtRef.current.y, lookY, 0.15);
           setCatLookAt({ x: lookAtRef.current.x, y: lookAtRef.current.y });
     
-          // Hit Testing
-          const catHeadTarget: Point = { x: 0.5, y: 0.35 }; 
-          const catNoseTarget: Point = { x: 0.5, y: 0.5 };
-          const catTailTarget: Point = { x: 0.68, y: 0.75 };
+          // Hit Testing (Adjusted for Scale 1.25)
+          const catHeadTarget: Point = { x: 0.5, y: 0.31 }; // Moved up slightly due to scale
+          const catNoseTarget: Point = { x: 0.5, y: 0.5 };  // Center remains center
+          const catTailTarget: Point = { x: 0.72, y: 0.81 }; // Moved out down-right due to scale
     
           const distFingerToNose = Math.hypot(fX - catNoseTarget.x, fY - catNoseTarget.y);
           const distPalmToHead = Math.hypot(pX - catHeadTarget.x, pY - catHeadTarget.y);
@@ -185,13 +192,17 @@ export default function App() {
         className="absolute inset-0 w-full h-full object-cover transform -scale-x-100 opacity-30 blur-sm" 
       />
 
-      {/* Cat Layer */}
+      {/* Cat Layer - Scaled Up */}
       <div className="absolute inset-0 pointer-events-none flex flex-col justify-center items-center z-10">
-        <TypewriterCat 
-            action={catAction} 
-            onAnimationEnd={() => {}}
-            lookAt={catLookAt} 
-        />
+        <div className="transform scale-125">
+            <TypewriterCat 
+                action={catAction} 
+                onAnimationEnd={() => {}}
+                lookAt={catLookAt} 
+                colorTheme={furColor}
+                bowColor={bowColor}
+            />
+        </div>
       </div>
 
       {/* Visual Cursors */}
@@ -220,6 +231,72 @@ export default function App() {
               <div className="w-4 h-4 bg-yellow-400 rounded-full animate-pulse" />
           </div>
       )}
+
+      {/* Color Picker Toolbar */}
+      <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 z-40">
+        <div className="bg-white/20 backdrop-blur-md rounded-full px-6 py-3 flex gap-6 items-center border border-white/20 shadow-2xl">
+            {/* Fur Color Selector */}
+            <div className="flex gap-4">
+                <button 
+                    onClick={() => setFurColor('amber')}
+                    className={`w-10 h-10 rounded-full border-4 shadow-lg transition-all duration-300 transform hover:scale-110 ${furColor === 'amber' ? 'border-white scale-110 shadow-[0_0_15px_rgba(251,191,36,0.8)]' : 'border-transparent opacity-80'}`}
+                    style={{ background: 'linear-gradient(135deg, #fcd34d, #fbbf24)' }}
+                    aria-label="Yellow Cat"
+                />
+                <button 
+                    onClick={() => setFurColor('pink')}
+                    className={`w-10 h-10 rounded-full border-4 shadow-lg transition-all duration-300 transform hover:scale-110 ${furColor === 'pink' ? 'border-white scale-110 shadow-[0_0_15px_rgba(244,114,182,0.8)]' : 'border-transparent opacity-80'}`}
+                    style={{ background: 'linear-gradient(135deg, #f9a8d4, #f472b6)' }}
+                    aria-label="Pink Cat"
+                />
+                <button 
+                    onClick={() => setFurColor('blue')}
+                    className={`w-10 h-10 rounded-full border-4 shadow-lg transition-all duration-300 transform hover:scale-110 ${furColor === 'blue' ? 'border-white scale-110 shadow-[0_0_15px_rgba(96,165,250,0.8)]' : 'border-transparent opacity-80'}`}
+                    style={{ background: 'linear-gradient(135deg, #93c5fd, #60a5fa)' }}
+                    aria-label="Blue Cat"
+                />
+            </div>
+            
+            {/* Divider */}
+            <div className="w-[2px] h-10 bg-white/20 rounded-full" />
+            
+            {/* Bow Color Selector */}
+            <div className="flex gap-4 items-center">
+                 {/* Bow Icon */}
+                 <div className="text-white/80 opacity-80">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/>
+                        <path d="M19.5 9.5c-1-1.5-2.5-2-3-2 .5-1.5 0-3-1.5-3.5-1.5-.5-3 1-3.5 2.5l-1-1.5L9 6.5c-.5-1.5-2-3-3.5-2.5C4 4.5 3.5 6 4 7.5c-.5 0-2 .5-3 2C.5 11 1.5 13 3 13.5c1 .5 2.5 0 3.5-1l1.5 1.5c-.5 1-1 2.5-.5 3.5.5 1.5 2 2 3.5 1.5.5-.5 1-2 0-3l1.5-1 1.5 1c-1 1-.5 2.5 0 3 .5 1.5 2 2 3.5 1.5 1.5-.5 2-2 1.5-3.5.5-.5 1.5-1 3-1 1.5-.5 2.5-2.5 2-4Zm-14 0c-1 0-1.5-1-1-1.5s1.5-1 2-.5c.5.5.5 1.5 0 2l-1 .5v-.5Zm13 0c-.5.5-1.5.5-2 0-.5-.5-.5-1.5 0-2 .5-.5 1.5-.5 2 .5 0 .5 0 1 0 1Z" opacity="0.8"/>
+                    </svg>
+                 </div>
+
+                 <button 
+                    onClick={() => setBowColor('pink')}
+                    className={`w-8 h-8 rounded-full border-2 shadow-sm transition-all duration-300 transform hover:scale-110 ${bowColor === 'pink' ? 'border-white scale-110 ring-2 ring-pink-300' : 'border-transparent opacity-80'}`}
+                    style={{ background: '#ff9ecd' }}
+                    aria-label="Pink Bow"
+                />
+                <button 
+                    onClick={() => setBowColor('red')}
+                    className={`w-8 h-8 rounded-full border-2 shadow-sm transition-all duration-300 transform hover:scale-110 ${bowColor === 'red' ? 'border-white scale-110 ring-2 ring-red-400' : 'border-transparent opacity-80'}`}
+                    style={{ background: '#ef4444' }}
+                    aria-label="Red Bow"
+                />
+                 <button 
+                    onClick={() => setBowColor('black')}
+                    className={`w-8 h-8 rounded-full border-2 shadow-sm transition-all duration-300 transform hover:scale-110 ${bowColor === 'black' ? 'border-white scale-110 ring-2 ring-gray-400' : 'border-transparent opacity-80'}`}
+                    style={{ background: '#1f2937' }}
+                    aria-label="Black Bow"
+                />
+                 <button 
+                    onClick={() => setBowColor('purple')}
+                    className={`w-8 h-8 rounded-full border-2 shadow-sm transition-all duration-300 transform hover:scale-110 ${bowColor === 'purple' ? 'border-white scale-110 ring-2 ring-purple-400' : 'border-transparent opacity-80'}`}
+                    style={{ background: '#a855f7' }}
+                    aria-label="Purple Bow"
+                />
+            </div>
+        </div>
+      </div>
 
       {/* UI / Instructions */}
       <div className="absolute top-6 left-6 max-w-sm z-30">
