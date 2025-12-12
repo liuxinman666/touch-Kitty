@@ -2,7 +2,9 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import TypewriterCat from './components/TypewriterCat';
 import { visionService } from './services/visionService';
+import { liveService } from './services/liveService';
 import { CatAction, Point } from './types';
+import { GoogleGenAI } from "@google/genai";
 
 // Interaction Config (Adjusted for 1.25x scale)
 const NOSE_THRESHOLD = 0.15; 
@@ -13,19 +15,37 @@ const ACTION_DURATION_MS = 1000;
 // Simple linear interpolation for smoothing
 const lerp = (start: number, end: number, factor: number) => start + (end - start) * factor;
 
+// Helper to convert file to Base64
+const fileToGenerativePart = async (file: File) => {
+  const base64EncodedDataPromise = new Promise<string>((resolve) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+    reader.readAsDataURL(file);
+  });
+  return {
+    inlineData: { data: await base64EncodedDataPromise, mimeType: file.type },
+  };
+};
+
 export default function App() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const requestRef = useRef<number | null>(null);
+  const lastVideoTimeRef = useRef<number>(-1);
   const [loaded, setLoaded] = useState(false);
   const [catAction, setCatAction] = useState<CatAction>(CatAction.IDLE);
   const [debugMsg, setDebugMsg] = useState("Initializing Vision...");
   const [furColor, setFurColor] = useState<'amber' | 'pink' | 'blue'>('amber');
   const [bowColor, setBowColor] = useState<'pink' | 'red' | 'black' | 'purple'>('pink');
   
-  // Track smoothed positions for visual cursors
+  // Voice State
+  const [isTalking, setIsTalking] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState("Ready to chat");
+
+  // Hand Tracking State
   const [cursorFinger, setCursorFinger] = useState<Point | null>(null);
   const [cursorPalm, setCursorPalm] = useState<Point | null>(null);
-  
+  const [hands, setHands] = useState<{left?: Point, right?: Point}>({});
+
   // Interaction State
   const isAnimating = useRef(false);
   const rawFinger = useRef<Point>({x: 0, y: 0});
@@ -34,6 +54,11 @@ export default function App() {
   // Derived state for Cat "Look At" behavior
   const lookAtRef = useRef<Point>({x: 0, y: 0});
   const [catLookAt, setCatLookAt] = useState<{x: number, y: number} | null>(null);
+
+  // Image Analysis State
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<string | null>(null);
 
   useEffect(() => {
     const startCamera = async () => {
@@ -73,9 +98,59 @@ export default function App() {
 
     return () => {
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
+      liveService.disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const toggleVoice = async () => {
+    if (isTalking) {
+      await liveService.disconnect();
+      setIsTalking(false);
+      setVoiceStatus("Ready to chat");
+    } else {
+      setIsTalking(true);
+      setVoiceStatus("Connecting...");
+      await liveService.connect((status) => {
+        setVoiceStatus(status);
+        if (status === "Disconnected" || status === "Error" || status === "Connection Failed") {
+            setIsTalking(false);
+        }
+      });
+    }
+  };
+
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setAnalyzing(true);
+      setAnalysisResult("Thinking..."); // Show temp message in bubble
+      
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const imagePart = await fileToGenerativePart(file);
+      
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-pro-preview',
+        contents: {
+          parts: [
+            imagePart,
+            { text: "You are Squirrel Mimi. Describe what you see in this image in a cute, excited way, as if you are looking at it!" }
+          ]
+        }
+      });
+
+      setAnalysisResult(response.text);
+    } catch (error) {
+      console.error("Analysis failed", error);
+      setAnalysisResult("Oops! I couldn't see that clearly.");
+    } finally {
+      setAnalyzing(false);
+      // Clear result after 8 seconds so it doesn't stick forever
+      setTimeout(() => setAnalysisResult(null), 8000);
+    }
+  };
 
   const triggerAction = useCallback((action: CatAction) => {
     if (isAnimating.current && action !== CatAction.TAIL_WAG) return;
@@ -100,81 +175,115 @@ export default function App() {
   const predictWebcam = () => {
     if (!videoRef.current) return;
     
-    try {
-        const results = visionService.detect(videoRef.current, Date.now());
-    
-        if (results && results.landmarks && results.landmarks.length > 0) {
-          const landmarks = results.landmarks[0]; // Just track one hand
-    
-          // 8: Index Tip, 9: Middle MCP (Palm)
-          const indexTip = landmarks[8];
-          const palmCenter = landmarks[9]; 
-    
-          // Mirror X for user-facing camera logic
-          const targetFingerX = 1 - indexTip.x;
-          const targetFingerY = indexTip.y;
-          
-          const targetPalmX = 1 - palmCenter.x;
-          const targetPalmY = palmCenter.y;
-    
-          // Smooth the raw inputs
-          rawFinger.current.x = lerp(rawFinger.current.x, targetFingerX, 0.2);
-          rawFinger.current.y = lerp(rawFinger.current.y, targetFingerY, 0.2);
-          
-          rawPalm.current.x = lerp(rawPalm.current.x, targetPalmX, 0.2);
-          rawPalm.current.y = lerp(rawPalm.current.y, targetPalmY, 0.2);
-    
-          // Update React State for Cursors
-          setCursorFinger({ ...rawFinger.current });
-          setCursorPalm({ ...rawPalm.current });
-    
-          // Cat Logic
-          const fX = rawFinger.current.x;
-          const fY = rawFinger.current.y;
-          const pX = rawPalm.current.x;
-          const pY = rawPalm.current.y;
-    
-          // Calculate "Look At" vector (Relative to center 0.5, 0.5)
-          const lookX = (pX - 0.5) * 2;
-          const lookY = (pY - 0.5) * 2;
-          
-          lookAtRef.current.x = lerp(lookAtRef.current.x, lookX, 0.15);
-          lookAtRef.current.y = lerp(lookAtRef.current.y, lookY, 0.15);
-          setCatLookAt({ x: lookAtRef.current.x, y: lookAtRef.current.y });
-    
-          // Hit Testing (Adjusted for Scale 1.25)
-          const catHeadTarget: Point = { x: 0.5, y: 0.31 }; // Moved up slightly due to scale
-          const catNoseTarget: Point = { x: 0.5, y: 0.5 };  // Center remains center
-          const catTailTarget: Point = { x: 0.72, y: 0.81 }; // Moved out down-right due to scale
-    
-          const distFingerToNose = Math.hypot(fX - catNoseTarget.x, fY - catNoseTarget.y);
-          const distPalmToHead = Math.hypot(pX - catHeadTarget.x, pY - catHeadTarget.y);
-          const distFingerToTail = Math.hypot(fX - catTailTarget.x, fY - catTailTarget.y);
-    
-          if (!isAnimating.current || catAction === CatAction.TAIL_WAG) {
-              if (distFingerToNose < NOSE_THRESHOLD) {
-                  triggerAction(CatAction.SNEEZE);
+    // Only process if the video frame has changed to avoid timestamp mismatch errors
+    if (videoRef.current.currentTime !== lastVideoTimeRef.current) {
+        lastVideoTimeRef.current = videoRef.current.currentTime;
+        
+        try {
+            // Use performance.now() for monotonic timestamps
+            const results = visionService.detect(videoRef.current, performance.now());
+        
+            let detectedHands: {left?: Point, right?: Point} = {};
+
+            if (results && results.landmarks && results.landmarks.length > 0) {
+              // Process main interaction hand (usually the first one detected)
+              const landmarks = results.landmarks[0]; 
+              
+              // 8: Index Tip, 9: Middle MCP (Palm)
+              const indexTip = landmarks[8];
+              const palmCenter = landmarks[9]; 
+        
+              // Mirror X for user-facing camera logic
+              const targetFingerX = 1 - indexTip.x;
+              const targetFingerY = indexTip.y;
+              
+              const targetPalmX = 1 - palmCenter.x;
+              const targetPalmY = palmCenter.y;
+        
+              // Smooth the raw inputs for cursor
+              rawFinger.current.x = lerp(rawFinger.current.x, targetFingerX, 0.2);
+              rawFinger.current.y = lerp(rawFinger.current.y, targetFingerY, 0.2);
+              
+              rawPalm.current.x = lerp(rawPalm.current.x, targetPalmX, 0.2);
+              rawPalm.current.y = lerp(rawPalm.current.y, targetPalmY, 0.2);
+        
+              // Update React State for Cursors
+              setCursorFinger({ ...rawFinger.current });
+              setCursorPalm({ ...rawPalm.current });
+
+              // --- Process All Hands for Puppeteering (Unity of Hands) ---
+              // results.handedness contains "Left" or "Right" label.
+              // In selfie mode:
+              // "Left" label = User's actual Left Hand -> Appears on Screen Right -> Controls Mimi's Left Paw (Screen Right)
+              // "Right" label = User's actual Right Hand -> Appears on Screen Left -> Controls Mimi's Right Paw (Screen Left)
+              
+              results.handedness.forEach((hand, index) => {
+                  const marks = results.landmarks[index];
+                  if (!marks) return;
+                  
+                  // Use wrist (0) or index (8) for paw target
+                  const point = marks[0]; 
+                  const mirroredX = 1 - point.x;
+                  const mirroredY = point.y;
+                  
+                  const handLabel = hand[0].categoryName; // "Left" or "Right"
+                  
+                  if (handLabel === "Left") {
+                      detectedHands.left = { x: mirroredX, y: mirroredY };
+                  } else {
+                      detectedHands.right = { x: mirroredX, y: mirroredY };
+                  }
+              });
+              setHands(detectedHands);
+        
+              // Cat Look At Logic (Follows the main cursor)
+              const fX = rawFinger.current.x;
+              const fY = rawFinger.current.y;
+              const pX = rawPalm.current.x;
+              const pY = rawPalm.current.y;
+        
+              // Calculate "Look At" vector (Relative to center 0.5, 0.5)
+              const lookX = (pX - 0.5) * 2;
+              const lookY = (pY - 0.5) * 2;
+              
+              lookAtRef.current.x = lerp(lookAtRef.current.x, lookX, 0.15);
+              lookAtRef.current.y = lerp(lookAtRef.current.y, lookY, 0.15);
+              setCatLookAt({ x: lookAtRef.current.x, y: lookAtRef.current.y });
+        
+              // Hit Testing
+              const catHeadTarget: Point = { x: 0.5, y: 0.31 }; 
+              const catNoseTarget: Point = { x: 0.5, y: 0.5 };  
+              const catTailTarget: Point = { x: 0.72, y: 0.81 };
+        
+              const distFingerToNose = Math.hypot(fX - catNoseTarget.x, fY - catNoseTarget.y);
+              const distPalmToHead = Math.hypot(pX - catHeadTarget.x, pY - catHeadTarget.y);
+              const distFingerToTail = Math.hypot(fX - catTailTarget.x, fY - catTailTarget.y);
+        
+              if (!isAnimating.current || catAction === CatAction.TAIL_WAG) {
+                  if (distFingerToNose < NOSE_THRESHOLD) {
+                      triggerAction(CatAction.SNEEZE);
+                  }
+                  else if (distFingerToTail < TAIL_THRESHOLD) {
+                      triggerAction(CatAction.TAIL_WAG);
+                  }
+                  else if (distPalmToHead < HEAD_THRESHOLD) {
+                      const possibleActions = [CatAction.JUMP, CatAction.SPIN, CatAction.SHAKE];
+                      const randomAction = possibleActions[Math.floor(Math.random() * possibleActions.length)];
+                      triggerAction(randomAction);
+                  }
               }
-              else if (distFingerToTail < TAIL_THRESHOLD) {
-                  triggerAction(CatAction.TAIL_WAG);
-              }
-              else if (distPalmToHead < HEAD_THRESHOLD) {
-                  const possibleActions = [CatAction.JUMP, CatAction.SPIN, CatAction.SHAKE];
-                  const randomAction = possibleActions[Math.floor(Math.random() * possibleActions.length)];
-                  triggerAction(randomAction);
-              }
-          }
-        } else {
-            // No hand detected
-            setCursorFinger(null);
-            setCursorPalm(null);
-            lookAtRef.current.x = lerp(lookAtRef.current.x, 0, 0.05);
-            lookAtRef.current.y = lerp(lookAtRef.current.y, 0, 0.05);
-            setCatLookAt({ x: lookAtRef.current.x, y: lookAtRef.current.y });
+            } else {
+                // No hand detected
+                setCursorFinger(null);
+                setCursorPalm(null);
+                setHands({});
+                lookAtRef.current.x = lerp(lookAtRef.current.x, 0, 0.05);
+                lookAtRef.current.y = lerp(lookAtRef.current.y, 0, 0.05);
+                setCatLookAt({ x: lookAtRef.current.x, y: lookAtRef.current.y });
+            }
+        } catch (e: any) {
+            console.warn("Prediction Error:", e);
         }
-    } catch (e: any) {
-        // Log but don't crash loop immediately, maybe one bad frame
-        console.warn("Prediction Error:", e);
     }
 
     requestRef.current = requestAnimationFrame(predictWebcam);
@@ -201,6 +310,8 @@ export default function App() {
                 lookAt={catLookAt} 
                 colorTheme={furColor}
                 bowColor={bowColor}
+                handPositions={hands}
+                externalSpeech={analysisResult}
             />
         </div>
       </div>
@@ -232,6 +343,46 @@ export default function App() {
           </div>
       )}
 
+      {/* Action Buttons Container - Right Side */}
+      <div className="absolute bottom-8 right-8 z-50 flex flex-col gap-4 items-end">
+        {/* Analyze Image Button */}
+        <div className="relative">
+            <input 
+                type="file" 
+                accept="image/*" 
+                onChange={handleImageUpload} 
+                className="hidden" 
+                ref={fileInputRef}
+                disabled={analyzing}
+            />
+            <button 
+                onClick={() => fileInputRef.current?.click()}
+                className={`flex items-center gap-3 px-6 py-4 rounded-full font-bold shadow-2xl transition-all duration-300 backdrop-blur-md border ${
+                    analyzing 
+                    ? 'bg-blue-500/80 border-blue-400 text-white animate-pulse' 
+                    : 'bg-white/20 border-white/20 text-white hover:bg-white/30'
+                }`}
+            >
+                <span className="text-xl">📸</span>
+                <span className="tracking-wide">{analyzing ? 'Mimi is Looking...' : 'Show Mimi a Photo'}</span>
+            </button>
+        </div>
+
+        {/* Voice Chat Button */}
+        <button 
+            onClick={toggleVoice}
+            className={`flex items-center gap-3 px-6 py-4 rounded-full font-bold shadow-2xl transition-all duration-300 backdrop-blur-md border ${
+                isTalking 
+                ? 'bg-red-500/80 border-red-400 text-white animate-pulse' 
+                : 'bg-white/20 border-white/20 text-white hover:bg-white/30'
+            }`}
+        >
+            <div className={`w-3 h-3 rounded-full ${isTalking ? 'bg-white' : 'bg-green-400'}`} />
+            <span className="tracking-wide">{isTalking ? 'Stop Chat' : 'Chat with Mimi'}</span>
+            <span className="text-xs opacity-70 border-l border-white/30 pl-3">{voiceStatus}</span>
+        </button>
+      </div>
+
       {/* Color Picker Toolbar */}
       <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 z-40">
         <div className="bg-white/20 backdrop-blur-md rounded-full px-6 py-3 flex gap-6 items-center border border-white/20 shadow-2xl">
@@ -262,14 +413,6 @@ export default function App() {
             
             {/* Bow Color Selector */}
             <div className="flex gap-4 items-center">
-                 {/* Bow Icon */}
-                 <div className="text-white/80 opacity-80">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/>
-                        <path d="M19.5 9.5c-1-1.5-2.5-2-3-2 .5-1.5 0-3-1.5-3.5-1.5-.5-3 1-3.5 2.5l-1-1.5L9 6.5c-.5-1.5-2-3-3.5-2.5C4 4.5 3.5 6 4 7.5c-.5 0-2 .5-3 2C.5 11 1.5 13 3 13.5c1 .5 2.5 0 3.5-1l1.5 1.5c-.5 1-1 2.5-.5 3.5.5 1.5 2 2 3.5 1.5.5-.5 1-2 0-3l1.5-1 1.5 1c-1 1-.5 2.5 0 3 .5 1.5 2 2 3.5 1.5 1.5-.5 2-2 1.5-3.5.5-.5 1.5-1 3-1 1.5-.5 2.5-2.5 2-4Zm-14 0c-1 0-1.5-1-1-1.5s1.5-1 2-.5c.5.5.5 1.5 0 2l-1 .5v-.5Zm13 0c-.5.5-1.5.5-2 0-.5-.5-.5-1.5 0-2 .5-.5 1.5-.5 2 .5 0 .5 0 1 0 1Z" opacity="0.8"/>
-                    </svg>
-                 </div>
-
                  <button 
                     onClick={() => setBowColor('pink')}
                     className={`w-8 h-8 rounded-full border-2 shadow-sm transition-all duration-300 transform hover:scale-110 ${bowColor === 'pink' ? 'border-white scale-110 ring-2 ring-pink-300' : 'border-transparent opacity-80'}`}
@@ -294,53 +437,6 @@ export default function App() {
                     style={{ background: '#a855f7' }}
                     aria-label="Purple Bow"
                 />
-            </div>
-        </div>
-      </div>
-
-      {/* UI / Instructions */}
-      <div className="absolute top-6 left-6 max-w-sm z-30">
-        <div className="bg-black/60 backdrop-blur-xl text-white p-6 rounded-3xl border border-white/10 shadow-2xl">
-            <h1 className="text-3xl font-black mb-1 tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-amber-500">
-                Cartoon Kitty
-            </h1>
-            <div className="flex items-center gap-2 mb-4">
-                <div className={`w-3 h-3 rounded-full ${loaded ? 'bg-green-400 shadow-[0_0_10px_#4ade80]' : 'bg-red-400'}`} />
-                <span className="text-xs uppercase tracking-wider font-bold text-gray-300">
-                  {typeof debugMsg === 'string' ? debugMsg : 'Processing...'}
-                </span>
-            </div>
-            
-            <div className="space-y-4">
-                <div className="flex items-center gap-4 group">
-                    <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
-                        ✋
-                    </div>
-                    <div>
-                        <p className="text-sm font-bold text-white">Pet Head</p>
-                        <p className="text-xs text-amber-200/70">Jump / Spin / Shake</p>
-                    </div>
-                </div>
-
-                <div className="flex items-center gap-4 group">
-                    <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
-                        ☝️
-                    </div>
-                    <div>
-                        <p className="text-sm font-bold text-white">Boop Nose</p>
-                        <p className="text-xs text-blue-200/70">Finger on nose = Sneeze</p>
-                    </div>
-                </div>
-
-                <div className="flex items-center gap-4 group">
-                    <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
-                        🌿
-                    </div>
-                    <div>
-                        <p className="text-sm font-bold text-white">Tickle Tail</p>
-                        <p className="text-xs text-green-200/70">Touch tail = Happy Wag</p>
-                    </div>
-                </div>
             </div>
         </div>
       </div>

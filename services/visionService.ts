@@ -18,7 +18,7 @@ export class VisionService {
             delegate: "GPU"
           },
           runningMode: this.runningMode,
-          numHands: 1
+          numHands: 2 // Updated to support both hands
         });
         console.log("Vision Initialized");
     } catch (e) {

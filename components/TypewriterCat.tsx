@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { CatAction } from '../types';
+import { CatAction, Point } from '../types';
 
 interface TypewriterCatProps {
   action: CatAction;
@@ -7,6 +8,8 @@ interface TypewriterCatProps {
   lookAt: { x: number, y: number } | null; // Coordinates -1 to 1
   colorTheme?: 'amber' | 'pink' | 'blue';
   bowColor?: 'pink' | 'red' | 'black' | 'purple';
+  handPositions?: { left?: Point, right?: Point }; // New prop for puppets
+  externalSpeech?: string | null; // New prop for analysis text
 }
 
 const CatEye: React.FC<{ isLeft: boolean, isSquinting: boolean, pupilX: number, pupilY: number }> = ({ isLeft, isSquinting, pupilX, pupilY }) => (
@@ -101,7 +104,59 @@ const CatEye: React.FC<{ isLeft: boolean, isSquinting: boolean, pupilX: number, 
 
 const isMoving = (action: CatAction) => action !== CatAction.IDLE && action !== CatAction.LAY;
 
-const CartoonCat: React.FC<TypewriterCatProps> = ({ action, onAnimationEnd, lookAt, colorTheme = 'amber', bowColor = 'pink' }) => {
+// Helper for arm kinematics
+const calculateArmTransform = (
+  handPos: Point | undefined, 
+  shoulderX: number, // Normalized 0-1 relative to container width approx
+  shoulderY: number, 
+  isLeftArm: boolean
+) => {
+  if (!handPos) {
+    // Default resting pose
+    return `rotate(${isLeftArm ? '-6deg' : '6deg'})`;
+  }
+
+  // Map normalized screen coordinates (0-1) to rough relative coordinates
+  // Hand 0,0 is top-left screen. 
+  // We approximate the cat's coordinate space.
+  // Center is 0.5, 0.5.
+  const dx = (handPos.x - shoulderX);
+  const dy = (handPos.y - shoulderY);
+  
+  // Calculate angle
+  // 90 deg is straight down (positive Y)
+  const angleRad = Math.atan2(dy, dx);
+  let angleDeg = angleRad * (180 / Math.PI);
+  
+  // Offset because the arm div points downwards by default (which is +90 deg in typical math, but 0 deg rotation in CSS)
+  // Actually, standard div is vertical. 0 deg points down.
+  // atan2(0, 1) = 0 (Right). atan2(1, 0) = 90 (Down).
+  // We want 0 rotation to be Down.
+  // So we subtract 90 degrees.
+  angleDeg -= 90;
+
+  // Clamp limits to prevent breaking arms
+  if (isLeftArm) {
+      // Left arm (on screen left/cat right)
+      // Natural range: -90 (Right) to +90 (Left) relative to down
+      angleDeg = Math.max(-120, Math.min(60, angleDeg));
+  } else {
+      // Right arm
+      angleDeg = Math.max(-60, Math.min(120, angleDeg));
+  }
+
+  return `rotate(${angleDeg}deg)`;
+};
+
+const CartoonCat: React.FC<TypewriterCatProps> = ({ 
+    action, 
+    onAnimationEnd, 
+    lookAt, 
+    colorTheme = 'amber', 
+    bowColor = 'pink',
+    handPositions,
+    externalSpeech
+}) => {
   const [blinking, setBlinking] = useState(false);
   const [earTwitch, setEarTwitch] = useState<'none' | 'left' | 'right' | 'both'>('none');
   const [speech, setSpeech] = useState<{show: boolean, text: string}>({show: false, text: ''});
@@ -110,23 +165,22 @@ const CartoonCat: React.FC<TypewriterCatProps> = ({ action, onAnimationEnd, look
   const [isSleepy, setIsSleepy] = useState(false);
   const [isYawning, setIsYawning] = useState(false);
 
-  // 1. Inactivity Timer: Enter sleepy state if IDLE for 10s
+  // 1. Inactivity Timer
   useEffect(() => {
-    if (action === CatAction.IDLE) {
+    if (action === CatAction.IDLE && !handPositions?.left && !handPositions?.right) {
         const timer = setTimeout(() => setIsSleepy(true), 10000);
         return () => clearTimeout(timer);
     } else {
         setIsSleepy(false);
         setIsYawning(false);
-        setBlinking(false); // Immediate open eyes if woken up
+        setBlinking(false);
     }
-  }, [action]);
+  }, [action, handPositions]);
 
-  // 2. Yawn Logic: Randomly yawn when sleepy
+  // 2. Yawn Logic
   useEffect(() => {
     if (!isSleepy) return;
     const interval = setInterval(() => {
-        // 30% chance to yawn every 5 seconds
         if (Math.random() < 0.3) {
             setIsYawning(true);
             setTimeout(() => setIsYawning(false), 2500);
@@ -135,19 +189,15 @@ const CartoonCat: React.FC<TypewriterCatProps> = ({ action, onAnimationEnd, look
     return () => clearInterval(interval);
   }, [isSleepy]);
 
-  // 3. Blinking Logic: Adaptive based on sleepiness
+  // 3. Blinking Logic
   useEffect(() => {
-    // Sleepy = blink less frequent but longer duration (slow blink)
-    // Awake = blink frequent and fast
     const minInterval = isSleepy ? 5000 : 3500;
     const randomAdd = isSleepy ? 4000 : 2000;
-    
     let timer: ReturnType<typeof setTimeout>;
 
     const blinkLoop = () => {
-        const duration = isSleepy ? 600 : 200; // Slow blink vs fast blink
+        const duration = isSleepy ? 600 : 200;
         setBlinking(true);
-        
         setTimeout(() => {
             setBlinking(false);
             const nextDelay = minInterval + Math.random() * randomAdd;
@@ -159,61 +209,54 @@ const CartoonCat: React.FC<TypewriterCatProps> = ({ action, onAnimationEnd, look
     return () => clearTimeout(timer);
   }, [isSleepy]);
 
-  // Ear Twitch Logic
+  // Ear Twitch
   useEffect(() => {
     const interval = setInterval(() => {
-        // 40% chance to twitch every check
         if (Math.random() < 0.4) {
             const r = Math.random();
             if (r < 0.33) setEarTwitch('left');
             else if (r < 0.66) setEarTwitch('right');
             else setEarTwitch('both');
-
             setTimeout(() => setEarTwitch('none'), 300);
         }
     }, 3000);
     return () => clearInterval(interval);
   }, []);
 
-  // Speech Bubble Logic
+  // Internal Speech (Random happiness)
   useEffect(() => {
       const isHappyAction = [CatAction.JUMP, CatAction.SPIN, CatAction.SHAKE].includes(action);
-      
       if (isHappyAction) {
           setSpeech(prev => {
-              if (prev.show) return prev; // Throttling
-
-              const messages = [
-                  "I love you! ❤️",
-                  "You're the best! 🌟",
-                  "So happy! 😸",
-                  "你是我的女神! ✨",
-                  "我越来越喜欢你了! 💖",
-                  "Meow~ 💕",
-                  "Let's play! 🐾"
-              ];
-              const randomMsg = messages[Math.floor(Math.random() * messages.length)];
-              return { show: true, text: randomMsg };
+              if (prev.show) return prev;
+              const messages = ["I love you! ❤️", "You're the best! 🌟", "So happy! 😸", "Meow~ 💕"];
+              return { show: true, text: messages[Math.floor(Math.random() * messages.length)] };
           });
+          setTimeout(() => setSpeech(prev => ({...prev, show: false})), 4000);
       }
   }, [action]);
 
-  // Auto-hide timer for Speech Bubble
+  // External Speech (Image Analysis)
   useEffect(() => {
-      if (speech.show) {
+      if (externalSpeech) {
+          setSpeech({ show: true, text: externalSpeech });
+          // Note: Hiding handled by parent clearing prop or manual timeout if needed, 
+          // but let's ensure we don't clear it immediately if it's long.
+          const readingTime = Math.max(4000, externalSpeech.length * 50);
           const timer = setTimeout(() => {
-              setSpeech(prev => ({ ...prev, show: false }));
-          }, 4000); 
+               // Optional: Auto hide? Parent handles nulling it usually.
+          }, readingTime);
           return () => clearTimeout(timer);
       }
-  }, [speech.show]);
+  }, [externalSpeech]);
+
 
   // Theme Config
   const themes = {
     amber: {
         bodyGradient: "bg-gradient-to-b from-amber-300 via-amber-400 to-orange-400",
         tailGradient: "bg-gradient-to-t from-amber-600 via-amber-300 to-white",
-        lightAccent: "bg-white", // Belly/Face White
+        lightAccent: "bg-white", 
         particleColors: ['#ef4444', '#f472b6', '#facc15', '#60a5fa'],
         starColors: ['#fbbf24', '#f472b6'],
         earInner: "bg-pink-100",
@@ -222,7 +265,7 @@ const CartoonCat: React.FC<TypewriterCatProps> = ({ action, onAnimationEnd, look
     pink: {
         bodyGradient: "bg-gradient-to-b from-pink-200 via-pink-300 to-rose-300",
         tailGradient: "bg-gradient-to-t from-rose-400 via-pink-200 to-white",
-        lightAccent: "bg-rose-50", // Soft pinkish white
+        lightAccent: "bg-rose-50",
         particleColors: ['#db2777', '#f472b6', '#fbcfe8', '#fff'],
         starColors: ['#f472b6', '#fbcfe8'],
         earInner: "bg-white",
@@ -231,7 +274,7 @@ const CartoonCat: React.FC<TypewriterCatProps> = ({ action, onAnimationEnd, look
     blue: {
         bodyGradient: "bg-gradient-to-b from-sky-200 via-sky-300 to-blue-300",
         tailGradient: "bg-gradient-to-t from-blue-400 via-sky-200 to-white",
-        lightAccent: "bg-sky-50", // Soft bluish white
+        lightAccent: "bg-sky-50",
         particleColors: ['#3b82f6', '#60a5fa', '#bae6fd', '#fff'],
         starColors: ['#60a5fa', '#bae6fd'],
         earInner: "bg-pink-100",
@@ -257,20 +300,23 @@ const CartoonCat: React.FC<TypewriterCatProps> = ({ action, onAnimationEnd, look
   const pupilX = lookAt ? lookAt.x * 14 : 0;
   const pupilY = lookAt ? lookAt.y * 12 : 0;
 
-  // Determine actual blink/squint state
-  // If yawning, we usually squint or close eyes
   const effectiveBlinking = blinking || isYawning;
   const isSquinting = effectiveBlinking || action === CatAction.JUMP || action === CatAction.SNEEZE || action === CatAction.SHAKE;
   const isHappyAction = [CatAction.JUMP, CatAction.SPIN, CatAction.SHAKE].includes(action);
+
+  // Arm IK Logic
+  // Screen Left Arm (Mimi's Right Arm) -> Controlled by User's Right Hand (Screen Left)
+  // Screen Right Arm (Mimi's Left Arm) -> Controlled by User's Left Hand (Screen Right)
+  // Shoulders are roughly at X=0.35/0.65, Y=0.5 in normalized space
+  const leftArmTransform = calculateArmTransform(handPositions?.right, 0.35, 0.5, true); 
+  const rightArmTransform = calculateArmTransform(handPositions?.left, 0.65, 0.5, false);
 
   const getContainerStyle = (): React.CSSProperties => {
     const baseStyle: React.CSSProperties = {
       transition: 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
       transformStyle: 'preserve-3d',
     };
-
     if (!action) return baseStyle;
-
     switch (action) {
       case CatAction.SPIN: return { ...baseStyle, animation: 'spin 0.6s cubic-bezier(0.45, 0, 0.55, 1)' };
       case CatAction.JUMP: return { ...baseStyle, animation: 'jump 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275)' };
@@ -442,8 +488,15 @@ const CartoonCat: React.FC<TypewriterCatProps> = ({ action, onAnimationEnd, look
                  <div className="w-1.5 h-4 bg-gray-200 rounded-full mx-1 opacity-50" />
              </div>
 
-             {/* === FRONT ARMS === */}
-             <div className={`absolute top-16 left-4 w-14 h-32 ${theme.lightAccent} rounded-[2rem] shadow-md transform -rotate-6 flex flex-col justify-end items-center pb-4 border-l-2 border-gray-100/50 z-20 origin-top`}>
+             {/* === FRONT ARMS (Animated by IK) === */}
+             {/* Left Arm (Visual Left) */}
+             <div 
+                className={`absolute top-16 left-4 w-14 h-32 ${theme.lightAccent} rounded-[2rem] shadow-md flex flex-col justify-end items-center pb-4 border-l-2 border-gray-100/50 z-20 origin-top`}
+                style={{ 
+                    transform: leftArmTransform,
+                    transition: 'transform 0.1s linear' // Fast transition for responsiveness
+                }}
+             >
                 <div className="w-[80%] h-full bg-gradient-to-b from-transparent to-gray-100/30 rounded-[2rem]" />
                 <div className="absolute bottom-2 flex gap-1.5">
                     <div className="w-1 h-3 bg-gray-200 rounded-full" />
@@ -452,7 +505,14 @@ const CartoonCat: React.FC<TypewriterCatProps> = ({ action, onAnimationEnd, look
                 </div>
              </div>
              
-             <div className={`absolute top-16 right-4 w-14 h-32 ${theme.lightAccent} rounded-[2rem] shadow-md transform rotate-6 flex flex-col justify-end items-center pb-4 border-r-2 border-gray-100/50 z-20 origin-top`}>
+             {/* Right Arm (Visual Right) */}
+             <div 
+                className={`absolute top-16 right-4 w-14 h-32 ${theme.lightAccent} rounded-[2rem] shadow-md flex flex-col justify-end items-center pb-4 border-r-2 border-gray-100/50 z-20 origin-top`}
+                style={{ 
+                    transform: rightArmTransform,
+                    transition: 'transform 0.1s linear'
+                }}
+             >
                 <div className="w-[80%] h-full bg-gradient-to-b from-transparent to-gray-100/30 rounded-[2rem]" />
                 <div className="absolute bottom-2 flex gap-1.5">
                     <div className="w-1 h-3 bg-gray-200 rounded-full" />
@@ -472,8 +532,8 @@ const CartoonCat: React.FC<TypewriterCatProps> = ({ action, onAnimationEnd, look
         >
             {/* SPEECH BUBBLE */}
             {speech.show && (
-                <div className="absolute -top-20 -right-28 bg-white text-gray-800 px-5 py-3 rounded-2xl shadow-xl z-[60] animate-pop-in origin-bottom-left border-2 border-pink-100">
-                    <p className="text-base font-bold whitespace-nowrap text-pink-500">{speech.text}</p>
+                <div className="absolute -top-20 -right-28 bg-white text-gray-800 px-5 py-3 rounded-2xl shadow-xl z-[60] animate-pop-in origin-bottom-left border-2 border-pink-100 max-w-xs">
+                    <p className="text-base font-bold text-pink-500 leading-snug">{speech.text}</p>
                     <div className="absolute bottom-0 left-4 -mb-2 w-4 h-4 bg-white border-b-2 border-r-2 border-pink-100 transform rotate-45"></div>
                 </div>
             )}
